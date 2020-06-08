@@ -47,17 +47,12 @@ program.command('release:publish')
   .description('publish a release based on Git tag')
   .option('--base-dir <base-dir>', 'Base directory for build (fast and big!; default /tmp/taskcluster-builder-build)')
   .option('--dry-run', 'Do not run any tasks, but generate the list of tasks')
-  .option('--staging', 'Staging run (implies --no-push)')
-  .option('--no-push', 'Do not push the GitHub release, docker images, packages, etc.')
+  .option('--staging <head-ref>', 'Staging run; head-ref is of the form refs/heads/staging-release/vX.Y.Z')
   .option('--logs-dir <logs-dir>', 'A directory to put debug logs. default <base-dir>/logs')
   .on('--help', () => {
     console.log([
       '',
-      'Set the following environment variables (unless --no-push):',
-      ' * GH_TOKEN - GitHub access token with permissions to create a release',
-      ' * NPM_TOKEN - NPM authentication token with permission to publish client libraries',
-      ' * PYPI_USERNAME / PYPI_PASSWORD - PyPI credentials with permission to upload taskcluster-client',
-      ' * DOCKER_USERNAME / DOCKER_PASSWORD - Docker credentials with permission to taskcluster/taskcluster',
+      'This command expects to run in automation in response to a push to CI.',
     ].join('\n'));
   })
   .action((...options) => {
