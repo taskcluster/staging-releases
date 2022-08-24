@@ -46,6 +46,8 @@ job-defaults:
       # set up yarn
       - curl -o- -L https://yarnpkg.com/install.sh | bash
       - export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
+      # install binfmt docker tools to build multi-arch images
+      - docker run --privileged --rm tonistiigi/binfmt --install all
       # clone the repo (shallow won't work here as it misses tags)
       - git clone --quiet --no-single-branch --tags {head_repository} taskcluster
       - cd taskcluster
