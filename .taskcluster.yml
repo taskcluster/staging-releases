@@ -42,25 +42,6 @@ tasks:
                       $if: 'tasks_for == "github-release"'
                       then: '${event.release.target_commitish}'
 
-          base_ref:
-              $if: 'tasks_for[:19] == "github-pull-request"'
-              then: ${event.pull_request.base.ref}
-              else:
-                  # event.base_ref is barely documented[1]. Testing showed it's only
-                  # defined when creating a new branch. It's null when pushing to an
-                  # existing branch
-                  #
-                  # [1] https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#push
-                  # [2] https://taskcluster-taskgraph.readthedocs.io/en/latest/reference/parameters.html#base-ref
-                  $if: 'tasks_for == "github-push" && event.base_ref'
-                  then: ${event.base_ref}
-                  else:
-                      $if: 'tasks_for == "github-push"'
-                      then: ${event.ref}
-                      else:
-                          $if: 'tasks_for in ["cron", "action"]'
-                          then: '${push.branch}'
-
           head_ref:
               $if: 'tasks_for[:19] == "github-pull-request"'
               then: ${event.pull_request.head.ref}
@@ -146,7 +127,6 @@ tasks:
                       # to `mach taskgraph decision` are all on the command line.
                       $merge:
                           - TASKCLUSTER_BASE_REPOSITORY: '${baseRepoUrl}'
-                            TASKCLUSTER_BASE_REF: '${base_ref}'
                             TASKCLUSTER_HEAD_REPOSITORY: '${repoUrl}'
                             TASKCLUSTER_HEAD_REF: '${head_ref}'
                             TASKCLUSTER_HEAD_REV: '${head_sha}'
@@ -157,9 +137,6 @@ tasks:
                           - $if: 'isPullRequest'
                             then:
                                 TASKCLUSTER_PULL_REQUEST_NUMBER: '${event.pull_request.number}'
-                          - $if: 'project == "staging-releases"'
-                            then:
-                                TASKCLUSTER_BASE_REF: 'refs/heads/main'
                   features:
                       taskclusterProxy: true
                   # Note: This task is built server side without the context or tooling that
@@ -189,7 +166,6 @@ tasks:
                         --target-tasks-method=taskcluster-branches
                         --tasks-for='${tasks_for}'
                         --base-repository='${baseRepoUrl}'
-                        --base-ref='${base_ref}'
                         --head-repository='${repoUrl}'
                         --head-ref='${head_ref}'
                         --head-rev='${head_sha}'
