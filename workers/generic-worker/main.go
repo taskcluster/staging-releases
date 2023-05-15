@@ -50,6 +50,8 @@ var (
 	cwd = CwdOrPanic()
 	// workerReady becomes true when it is able to call queue.claimWork for the first time
 	workerReady = false
+	// Whether we are running in Azure
+	configureForAzure bool
 	// General platform independent user settings, such as home directory, username...
 	// Platform specific data should be managed in plat_<platform>.go files
 	taskContext    = &TaskContext{}
@@ -116,6 +118,8 @@ func main() {
 		fmt.Println(taskPayloadSchema())
 
 	case arguments["run"]:
+		configureForAzure = arguments["--configure-for-azure"].(bool)
+
 		withWorkerRunner := arguments["--with-worker-runner"].(bool)
 		if withWorkerRunner {
 			// redirect stdio to the protocol pipe, if given; eventually this will
@@ -141,6 +145,10 @@ func main() {
 		}
 
 		var provider Provider = NO_PROVIDER
+		switch {
+		case configureForAzure:
+			provider = AZURE_PROVIDER
+		}
 
 		serviceFactory = &tc.ClientFactory{}
 
@@ -302,6 +310,8 @@ func loadConfig(configFile *gwconfig.File, provider Provider) (gwconfig.Provider
 func ConfigProvider(configFile *gwconfig.File, provider Provider) (gwconfig.Provider, error) {
 	var configProvider gwconfig.Provider
 	switch provider {
+	case AZURE_PROVIDER:
+		configProvider = &AzureConfigProvider{}
 	default:
 		configProvider = configFile
 	}

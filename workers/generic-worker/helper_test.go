@@ -321,6 +321,7 @@ type (
 		OldInternalPUTPort uint16
 		OldInternalGETPort uint16
 		OldConfigureForGCP bool
+		OldConfigureForAzure bool
 		srv                *http.Server
 		router             *mux.Router
 	}
@@ -465,13 +466,14 @@ func GWTest(t *testing.T) *Test {
 	serviceFactory = mocktc.NewServiceFactory(t)
 
 	return &Test{
-		t:                  t,
-		Config:             testConfig,
-		Provider:           NO_PROVIDER,
-		OldInternalPUTPort: internalPUTPort,
-		OldInternalGETPort: internalGETPort,
-		srv:                srv,
-		router:             r,
+		t:                    t,
+		Config:               testConfig,
+		Provider:             NO_PROVIDER,
+		OldInternalPUTPort:   internalPUTPort,
+		OldInternalGETPort:   internalGETPort,
+		OldConfigureForAzure: configureForAzure,
+		srv:                  srv,
+		router:               r,
 	}
 }
 
@@ -491,6 +493,9 @@ func (gwtest *Test) Setup() error {
 }
 
 func (gwtest *Test) Teardown() {
+	internalPUTPort = gwtest.OldInternalPUTPort
+	internalGETPort = gwtest.OldInternalGETPort
+	configureForAzure = gwtest.OldConfigureForAzure
 	gwtest.t.Logf("Removing test directory %v...", filepath.Join(testdataDir, gwtest.t.Name()))
 	err := os.RemoveAll(filepath.Join(testdataDir, gwtest.t.Name()))
 	if err != nil {
