@@ -471,6 +471,7 @@ func GWTest(t *testing.T) *Test {
 		Provider:             NO_PROVIDER,
 		OldInternalPUTPort:   internalPUTPort,
 		OldInternalGETPort:   internalGETPort,
+		OldConfigureForGCP:   configureForGCP,
 		OldConfigureForAzure: configureForAzure,
 		srv:                  srv,
 		router:               r,
@@ -495,6 +496,7 @@ func (gwtest *Test) Setup() error {
 func (gwtest *Test) Teardown() {
 	internalPUTPort = gwtest.OldInternalPUTPort
 	internalGETPort = gwtest.OldInternalGETPort
+	configureForGCP = gwtest.OldConfigureForGCP
 	configureForAzure = gwtest.OldConfigureForAzure
 	gwtest.t.Logf("Removing test directory %v...", filepath.Join(testdataDir, gwtest.t.Name()))
 	err := os.RemoveAll(filepath.Join(testdataDir, gwtest.t.Name()))

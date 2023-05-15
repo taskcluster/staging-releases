@@ -50,6 +50,8 @@ var (
 	cwd = CwdOrPanic()
 	// workerReady becomes true when it is able to call queue.claimWork for the first time
 	workerReady = false
+	// Whether we are running in GCP
+	configureForGCP bool
 	// Whether we are running in Azure
 	configureForAzure bool
 	// General platform independent user settings, such as home directory, username...
@@ -118,6 +120,7 @@ func main() {
 		fmt.Println(taskPayloadSchema())
 
 	case arguments["run"]:
+		configureForGCP = arguments["--configure-for-gcp"].(bool)
 		configureForAzure = arguments["--configure-for-azure"].(bool)
 
 		withWorkerRunner := arguments["--with-worker-runner"].(bool)
@@ -146,6 +149,8 @@ func main() {
 
 		var provider Provider = NO_PROVIDER
 		switch {
+		case configureForGCP:
+			provider = GCP_PROVIDER
 		case configureForAzure:
 			provider = AZURE_PROVIDER
 		}
@@ -155,7 +160,8 @@ func main() {
 		configProvider, err = loadConfig(configFile, provider)
 
 		// We need to persist the generic-worker config file if we fetched it
-		// over the network.
+		// over the network, for example if the config is fetched from the Google
+		// Cloud service (--configure-for-gcp).
 		//
 		// We persist the config _before_ checking for an error from the
 		// loadConfig function call, so that if there was an error, we can see
@@ -310,6 +316,8 @@ func loadConfig(configFile *gwconfig.File, provider Provider) (gwconfig.Provider
 func ConfigProvider(configFile *gwconfig.File, provider Provider) (gwconfig.Provider, error) {
 	var configProvider gwconfig.Provider
 	switch provider {
+	case GCP_PROVIDER:
+		configProvider = &GCPConfigProvider{}
 	case AZURE_PROVIDER:
 		configProvider = &AzureConfigProvider{}
 	default:
