@@ -137,12 +137,3 @@ func goRun(goFile string, args ...string) [][]string {
 	runWithArgs := append(run, args...)
 	return append(copy, runWithArgs)
 }
-
-func sleep(seconds uint) [][]string {
-	return [][]string{
-		{
-			"sleep",
-			strconv.Itoa(int(seconds)),
-		},
-	}
-}
