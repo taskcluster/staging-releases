@@ -317,6 +317,9 @@ type (
 	Test struct {
 		t                  *testing.T
 		Config             *gwconfig.Config
+		Provider           Provider
+		OldInternalPUTPort uint16
+		OldInternalGETPort uint16
 		OldConfigureForGCP bool
 		srv                *http.Server
 		router             *mux.Router
@@ -462,24 +465,29 @@ func GWTest(t *testing.T) *Test {
 	serviceFactory = mocktc.NewServiceFactory(t)
 
 	return &Test{
-		t:      t,
-		Config: testConfig,
-		srv:    srv,
-		router: r,
+		t:                  t,
+		Config:             testConfig,
+		Provider:           NO_PROVIDER,
+		OldInternalPUTPort: internalPUTPort,
+		OldInternalGETPort: internalGETPort,
+		srv:                srv,
+		router:             r,
 	}
 }
 
 func (gwtest *Test) Setup() error {
-	configFile = &gwconfig.File{
+	configFile := &gwconfig.File{
 		Path: filepath.Join(testdataDir, gwtest.t.Name(), "generic-worker.config"),
 	}
-
-	err := fileutil.WriteToFileAsJSON(gwtest.Config, configFile.Path)
-	if err != nil {
-		gwtest.t.Fatalf("Could not write config file: %v", err)
+	if gwtest.Provider == NO_PROVIDER {
+		err := configFile.Persist(gwtest.Config)
+		if err != nil {
+			gwtest.t.Fatalf("Could not persist config file: %v", err)
+		}
 	}
-
-	return loadConfig(configFile)
+	var err error
+	configProvider, err = loadConfig(configFile, gwtest.Provider)
+	return err
 }
 
 func (gwtest *Test) Teardown() {
