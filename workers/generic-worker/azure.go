@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -66,7 +66,7 @@ func queryAzureMetaData(client *http.Client, path string, apiVersion string) ([]
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func (g *AzureConfigProvider) UpdateConfig(c *gwconfig.Config) error {

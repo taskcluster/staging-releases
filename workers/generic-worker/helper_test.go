@@ -26,7 +26,7 @@ import (
 	"github.com/taskcluster/slugid-go/slugid"
 	tcclient "github.com/taskcluster/taskcluster/v50/clients/client-go"
 	"github.com/taskcluster/taskcluster/v50/clients/client-go/tcqueue"
-	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/fileutil"
+	"github.com/taskcluster/taskcluster/v50/internal/mocktc"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/gwconfig"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/mockec2"
 )
@@ -349,8 +349,6 @@ type (
 		t                     *testing.T
 		Config                *gwconfig.Config
 		Provider              Provider
-		OldInternalPUTPort    uint16
-		OldInternalGETPort    uint16
 		OldEC2MetadataBaseURL string
 		OldConfigureForAWS    bool
 		OldConfigureForGCP    bool
@@ -502,8 +500,6 @@ func GWTest(t *testing.T) *Test {
 		t:                     t,
 		Config:                testConfig,
 		Provider:              NO_PROVIDER,
-		OldInternalPUTPort:    internalPUTPort,
-		OldInternalGETPort:    internalGETPort,
 		OldEC2MetadataBaseURL: EC2MetadataBaseURL,
 		OldConfigureForAWS:    configureForAWS,
 		OldConfigureForGCP:    configureForGCP,
@@ -538,8 +534,6 @@ func (gwtest *Test) Setup() error {
 }
 
 func (gwtest *Test) Teardown() {
-	internalPUTPort = gwtest.OldInternalPUTPort
-	internalGETPort = gwtest.OldInternalGETPort
 	EC2MetadataBaseURL = gwtest.OldEC2MetadataBaseURL
 	configureForAWS = gwtest.OldConfigureForAWS
 	configureForGCP = gwtest.OldConfigureForGCP
