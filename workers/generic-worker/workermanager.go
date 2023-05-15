@@ -23,6 +23,7 @@ type Provider uint
 
 const (
 	NO_PROVIDER = iota
+	AWS_PROVIDER
 	AZURE_PROVIDER
 	GCP_PROVIDER
 )
