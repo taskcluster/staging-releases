@@ -9,7 +9,6 @@ exports.tasks = [{
   title: 'README TOCs',
   provides: ['target-readme-tocs'],
   requires: [
-    'target-worker-runner',
     'target-generic-worker',
     'generic-worker-readme',
     'db-versions-readme',

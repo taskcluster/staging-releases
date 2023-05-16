@@ -32,7 +32,6 @@ import (
 	"github.com/taskcluster/taskcluster/v50/internal/mocktc/tc"
 	"github.com/taskcluster/taskcluster/v50/internal/scopes"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/artifacts"
-	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/errorreport"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/expose"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/fileutil"
 	"github.com/taskcluster/taskcluster/v50/workers/generic-worker/graceful"
@@ -140,8 +139,6 @@ func main() {
 				os.Stderr = f
 			}
 		}
-
-		initializeWorkerRunnerProtocol(os.Stdin, os.Stdout, withWorkerRunner)
 
 		configFileAbs, err := filepath.Abs(arguments["--config"].(string))
 		exitOnError(CANT_LOAD_CONFIG, err, "Cannot determine absolute path location for generic-worker config file '%v'", arguments["--config"])
@@ -392,7 +389,6 @@ func HandleCrash(r interface{}) {
 	log.Print(string(debug.Stack()))
 	log.Print(" *********** PANIC occurred! *********** ")
 	log.Printf("%v", r)
-	errorreport.Send(WorkerRunnerProtocol, r, debugInfo)
 	ReportCrashToSentry(r)
 }
 
@@ -1268,7 +1264,5 @@ func exitOnError(exitCode ExitCode, err error, logMessage string, args ...interf
 	log.Printf(logMessage, args...)
 	log.Printf("Root cause: %v", err)
 	log.Printf("%#v (%T)", err, err)
-	combinedErr := fmt.Errorf("%s, args: %v, root cause: %v, exit code: %d", logMessage, args, err, exitCode)
-	errorreport.Send(WorkerRunnerProtocol, combinedErr, debugInfo)
 	os.Exit(int(exitCode))
 }
