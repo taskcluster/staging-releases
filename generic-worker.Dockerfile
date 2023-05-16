@@ -8,10 +8,9 @@ WORKDIR /app
 COPY . .
 
 ENV CGO_ENABLED=0
-RUN cd tools/livelog && go build -o /livelog && cd ..
-RUN cd tools/worker-runner && go build -o /start-worker ./cmd/start-worker && cd ..
-RUN cd tools/taskcluster-proxy && go build -o /taskcluster-proxy && cd ..
-RUN cd clients/client-shell && go build -o /taskcluster && cd ../..
+RUN cd tools/livelog && go build -o /livelog
+RUN cd tools/taskcluster-proxy && go build -o /taskcluster-proxy
+RUN cd clients/client-shell && go build -o /taskcluster
 RUN cd workers/generic-worker && \
   ./build.sh && \
   mv generic-worker-multiuser-* /generic-worker-multiuser && \
@@ -23,7 +22,7 @@ FROM ubuntu:kinetic
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y ca-certificates curl gzip
 
-COPY --from=build /livelog /taskcluster-proxy /start-worker /taskcluster /generic-worker* /usr/local/bin/
+COPY --from=build /livelog /taskcluster-proxy /taskcluster /generic-worker* /usr/local/bin/
 RUN ls -la /usr/local/bin
 
 RUN mkdir -p /etc/generic-worker
