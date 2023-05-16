@@ -17,8 +17,6 @@ and reports back results to the queue.
 
   Usage:
     generic-worker run                      [--config         CONFIG-FILE]
-                                            [--with-worker-runner]
-                                            [--worker-runner-protocol-pipe PIPE]
                                             [--configure-for-aws | --configure-for-gcp | --configure-for-azure]
     generic-worker show-payload-schema
     generic-worker new-ed25519-keypair      --file ED25519-PRIVATE-KEY-FILE
@@ -26,9 +24,7 @@ and reports back results to the queue.
     generic-worker --version
 
   Targets:
-    run                                     Runs the generic-worker.  Pass --with-worker-runner if
-                                            running under that service, otherwise generic-worker will
-                                            not communicate with worker-runner.
+    run                                     Runs the generic-worker.
     show-payload-schema                     Each taskcluster task defines a payload to be
                                             interpreted by the worker that executes it. This
                                             payload is validated against a json schema baked
@@ -48,11 +44,6 @@ and reports back results to the queue.
                                             installation should use, rather than the config
                                             to use during install.
                                             [default: generic-worker.config]
-    --worker-runner-protocol-pipe PIPE      Use this option when running generic-worker under
-                                            worker-runner, passing the same value as given for
-                                            'worker.protocolPipe' in the runner configuration.
-                                            This specifies a named pipe that is used for
-                                            communication between the two processes.
     --configure-for-aws                     Use this option when installing or running a worker
                                             that is spawned by the AWS provisioner. It will cause
                                             the worker to query the EC2 metadata service when it
@@ -293,7 +284,6 @@ and reports back results to the queue.
            or Google Cloud metadata.
     77     Not able to apply required file access permissions to the generic-worker config
            file so that task users can't read from or write to it.
-    78     Not able to connect to --worker-runner-protocol-pipe.
 ```
 <!-- HELP END -->
 
