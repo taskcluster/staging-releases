@@ -14,6 +14,11 @@
     "test": "mocha test/*.js",
     "lint": "eslint src/*.js test/*.js"
   },
+  "devDependencies": {
+    "c8": "^8.0.1",
+    "eslint": "^8.52.0",
+    "mocha": "^10.2.0"
+  },
   "author": "John Ford <jhford.mozilla@com>",
   "license": "MPL-2.0"
 }
