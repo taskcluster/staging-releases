@@ -5,13 +5,21 @@ import { exec as realExec } from './exec.js';
 import { withRetry } from './retry.js';
 
 const OUT_DIR = 'release-dist';
+const FATAL_PUBLISH_ERROR = /403|401|Forbidden|Unauthorized|invalid/i;
+
+const fatal = message => Object.assign(new Error(message), { retriable: false });
 
 export const publishedFiles = async (version, { sleep, log } = {}) =>
   withRetry(
     async () => {
-      const res = await fetch(`https://pypi.org/pypi/taskcluster/${version}/json`);
+      const res = await fetch(`https://pypi.org/pypi/taskcluster/${version}/json`, {
+        signal: AbortSignal.timeout(30_000),
+      });
       if (res.status === 404) {
         return new Map();
+      }
+      if (res.status >= 400 && res.status < 500) {
+        throw fatal(`PyPI returned ${res.status}`);
       }
       if (!res.ok) {
         throw new Error(`PyPI returned ${res.status}`);
@@ -28,12 +36,24 @@ export const publishedFiles = async (version, { sleep, log } = {}) =>
  * already present counts as done even if a rebuild hashes differently.
  */
 export const publishPypi = async ({ ctx, creds, clientDir, exec = realExec, sleep, log = console.log }) => {
+  const dist = path.join(clientDir, OUT_DIR);
+  // never upload anything left over from an earlier build
+  fs.rmSync(dist, { recursive: true, force: true });
   const build = await exec(['uv', 'build', '--out-dir', OUT_DIR], { cwd: clientDir });
   if (build.code !== 0) {
     throw new Error(`uv build failed: ${build.stderr}`);
   }
-  const dist = path.join(clientDir, OUT_DIR);
-  const files = fs.readdirSync(dist).filter(f => f.endsWith('.whl') || f.endsWith('.tar.gz'));
+  const built = fs.readdirSync(dist).filter(f => f.endsWith('.whl') || f.endsWith('.tar.gz'));
+  const sdist = `taskcluster-${ctx.version}.tar.gz`;
+  const wheelPrefix = `taskcluster-${ctx.version}-`;
+  const wheels = built.filter(f => f.startsWith(wheelPrefix) && f.endsWith('.whl'));
+  if (!built.includes(sdist) || wheels.length !== 1 || built.length !== 2) {
+    // typically pyproject.toml's version doesn't match the release version
+    throw fatal(
+      `built files [${built.join(', ')}] do not match expected [${sdist}, ${wheelPrefix}*.whl] for version ${ctx.version}`
+    );
+  }
+  const files = [sdist, wheels[0]];
   if (ctx.staging) {
     log(`staging: built ${files.join(', ')}; not uploading`);
     return 'dry-run';
@@ -79,7 +99,8 @@ export const publishPypi = async ({ ctx, creds, clientDir, exec = realExec, slee
         }
       );
       if (r.code !== 0) {
-        throw new Error(`uv publish failed: ${r.stderr.trim()}`);
+        const message = `uv publish failed: ${r.stderr.trim()}`;
+        throw FATAL_PUBLISH_ERROR.test(r.stderr) ? fatal(message) : new Error(message);
       }
     },
     { sleep, log, label: 'uv publish' }
