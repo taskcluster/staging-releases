@@ -10,6 +10,8 @@ import { fetchDependencyArtifacts } from './artifacts.js';
 import { pushImage, startScratchRegistry } from './push-image.js';
 import { draftRelease, publishRelease, extractChangelog } from './github-release.js';
 import { publishPypi } from './pypi.js';
+import { publishCrates } from './crates.js';
+import { publishHomebrew } from './homebrew.js';
 import { REPO_ROOT } from '../utils/index.js';
 
 const PluggedOctokit = Octokit.plugin(retry, throttling);
@@ -65,6 +67,15 @@ STEPS['github-release-publish'] = async ({ ctx, octokit, workDir, fetchArtifacts
 
 STEPS['publish-pypi'] = async ({ ctx, creds }) => {
   return publishPypi({ ctx, creds, clientDir: path.join(REPO_ROOT, 'clients', 'client-py') });
+};
+
+STEPS['publish-crates'] = async ({ ctx, creds }) =>
+  JSON.stringify(await publishCrates({ ctx, creds, rustDir: path.join(REPO_ROOT, 'clients', 'client-rust') }));
+
+STEPS['publish-homebrew'] = async ({ ctx, octokit, workDir, fetchArtifacts }) => {
+  await fetchArtifacts('public/homebrew/');
+  const cask = fs.readFileSync(path.join(workDir, 'taskcluster.rb'), 'utf8');
+  return publishHomebrew({ ctx, octokit, cask });
 };
 
 export const runStep = async ({ step, name }) => {
