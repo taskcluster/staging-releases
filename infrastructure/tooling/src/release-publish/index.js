@@ -5,9 +5,27 @@ import taskcluster from '@taskcluster/client';
 import { Octokit } from '@octokit/rest';
 import { loadContext, loadCredentials } from './context.js';
 import { fetchDependencyArtifacts } from './artifacts.js';
+import { pushImage, startScratchRegistry } from './push-image.js';
 
 // step name -> async ({ ctx, creds, octokit, workDir, fetchArtifacts, name }) => outcome string
 const STEPS = {};
+
+STEPS['push-image'] = async ({ ctx, creds, workDir, fetchArtifacts, name }) => {
+  if (!name) {
+    throw new Error('push-image requires --name');
+  }
+  await fetchArtifacts('public/build/');
+  if (!ctx.staging) {
+    return pushImage({ ctx, creds, dir: workDir, name });
+  }
+  // staging: exercise the real push path against a throwaway local registry
+  const stop = await startScratchRegistry();
+  try {
+    return await pushImage({ ctx, creds, dir: workDir, name, registry: 'localhost:5000', tlsVerify: false });
+  } finally {
+    await stop();
+  }
+};
 
 export const runStep = async ({ step, name }) => {
   const impl = STEPS[step];
