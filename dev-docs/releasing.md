@@ -26,7 +26,7 @@ The graph has five stages, defined in `taskcluster/kinds/release-*`:
    through GitHub Actions), then updates the Homebrew tap.
 5. **release-notify**: emails once every publish and finalize task has succeeded (or when the 4-day deadline expires with something unfinished).
 
-Every publish step checks the destination first, so it can be run any number of times.
+Every publish step checks the destination first, so it can be run any number of times; see below for the one exception, rebuilding images.
 Every release task also emails taskcluster-notifications@mozilla.com immediately if it fails or
 raises an exception, so you do not need to wait for `release-notify` to learn about a problem. Staging releases do not send email; watch the task group instead.
 
@@ -43,6 +43,10 @@ it creates a new task that nothing downstream waits for. When the rerun succeeds
 waiting tasks continue automatically. Release tasks have a 4-day deadline; after that,
 reruns are refused and the release must be finished by re-pushing the tag
 (delete and recreate it) to start a new graph.
+Re-pushing the tag only works if no `push-image-*` task has succeeded yet. If some images were
+already pushed, the new graph's push tasks for those images will fail by design (the rebuilt image
+has a different digest), and the way forward is a new patch release (`yarn release` again, which
+bumps the version) rather than re-tagging.
 
 Never rerun an `image-*` build after its `push-image-*` task has succeeded. The rebuilt image
 has a different digest, so the push task will (correctly) refuse to overwrite the tag.
