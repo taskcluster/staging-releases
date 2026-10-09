@@ -44,7 +44,9 @@ transforms = TransformSequence()
 def select_release_tasks(config, tasks):
     """Generate release tasks only for release or staging-release pushes, and
     give every one the shared version environment, deadline and requirement."""
-    info = release_info(config.params["head_ref"], config.params["tasks_for"])
+    info = release_info(
+        config.params["head_ref"], config.params["tasks_for"], config.params["project"]
+    )
     for task in tasks:
         release_only = task.pop("release-only", False)
         if info is None or (info.staging and release_only):
@@ -102,7 +104,9 @@ secret = TransformSequence()
 
 @secret.add
 def add_release_secret(config, tasks):
-    info = release_info(config.params["head_ref"], config.params["tasks_for"])
+    info = release_info(
+        config.params["head_ref"], config.params["tasks_for"], config.params["project"]
+    )
     for task in tasks:
         name = STAGING_RELEASE_SECRET if info.staging else RELEASE_SECRET
         task.setdefault("scopes", []).append(f"secrets:get:{name}")

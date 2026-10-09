@@ -332,7 +332,9 @@ def check_release_pipeline(tasks, graph_name, staging):
     builds = {label for label in labels if tasks[label].get("kind") == "release-build"}
     gate_deps = set(tasks.get("release-gate-builds", {}).get("dependencies", {}).values())
     if gate_deps != builds:
-        errors.append(f"release-gate-builds must depend on exactly the builds; extra/missing: {sorted(gate_deps ^ builds)}")
+        errors.append(
+            f"release-gate-builds must depend on exactly the builds; extra/missing: {sorted(gate_deps ^ builds)}"
+        )
 
     secret = "secrets:get:project/taskcluster/" + ("staging-release" if staging else "release")
     for label in sorted(labels & (RELEASE_PUBLISH_LABELS | finalize)):
@@ -344,6 +346,16 @@ def check_release_pipeline(tasks, graph_name, staging):
         env = tasks[label]["task"].get("payload", {}).get("env", {})
         if (env.get("STAGING") == "1") != staging:
             errors.append(f"{label} has STAGING={env.get('STAGING')!r}")
+
+    pypi = tasks.get("release-publish-pypi", {}).get("task", {}).get("payload", {})
+    mount_urls = [m.get("content", {}).get("url", "") for m in pypi.get("mounts", [])]
+    command = json.dumps(pypi.get("command", []))
+    if "sha256sum -c" not in command or "astral-sh/uv/releases/download/" not in command:
+        errors.append("release-publish-pypi does not download uv and verify its sha256")
+    if any("astral-sh" in url for url in mount_urls):
+        errors.append("release-publish-pypi mounts uv without checksum verification")
+    if "uv --version" not in command:
+        errors.append("release-publish-pypi command does not check uv --version")
 
     if not staging:
         homebrew = set(tasks.get("release-finalize-publish-homebrew", {}).get("dependencies", {}).values())

@@ -14,9 +14,14 @@ const CLIENT_SHELL_PLATFORMS = [
   'windows-arm64',
 ];
 
+// livelog, worker-runner (start-worker) and taskcluster-proxy are built for every
+// platform as bare binaries (see their build scripts in tools/)
+const TOOL_BINARIES = ['livelog', 'start-worker', 'taskcluster-proxy'];
+
 /** Assets that every release must have, as a sanity check on the build artifacts. */
 export const requiredAssets = version => [
   ...CLIENT_SHELL_PLATFORMS.map(p => `taskcluster-${p}.${p.startsWith('windows') ? 'zip' : 'tar.gz'}`),
+  ...TOOL_BINARIES.flatMap(tool => CLIENT_SHELL_PLATFORMS.map(p => `${tool}-${p}`)),
   `taskcluster-client-${version}.tgz`,
   `taskcluster-client-web-${version}.tgz`,
 ];
@@ -36,6 +41,10 @@ export const findRelease = async ({ octokit, owner, repo, tag }) => {
   return releases.find(r => r.tag_name === tag);
 };
 
+// Staging reuses the next version number until a real release ships, so a repeat staging
+// run finds the previous run's published release. Only there may it be replaced.
+const mayReplacePublished = ctx => ctx.staging && ctx.owner === 'taskcluster' && ctx.repo === 'staging-releases';
+
 const listAssets = (octokit, owner, repo, release_id) =>
   octokit.paginate(octokit.repos.listReleaseAssets, { owner, repo, release_id, per_page: 100 });
 
@@ -50,21 +59,49 @@ const deleteAsset = async (octokit, owner, repo, asset_id) => {
   }
 };
 
+// Delete a staging release and its tag so the next draft can be created from scratch.
+const deletePublishedRelease = async ({ octokit, owner, repo, tag, release, log }) => {
+  log(`deleting published staging release ${tag} (id ${release.id}) and its tag to replace it with a fresh draft`);
+  // The tag goes first: if the second call fails, a Rerun still finds the leftover published
+  // release and retries this cleanup, whereas a leftover tag with no release would make GitHub
+  // ignore target_commitish when the new release is created.
+  try {
+    await octokit.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+  } catch (err) {
+    // 404, or 422 "Reference does not exist": the tag is already gone
+    if (err.status !== 404 && err.status !== 422) {
+      throw err;
+    }
+  }
+  await octokit.repos.deleteRelease({ owner, repo, release_id: release.id });
+};
+
 /**
  * Create (or reuse) the draft release and make its assets match `files`. Safe to
  * rerun: complete assets are kept, and partial ones are replaced. A release that is
- * already published is never modified beyond uploading assets that are absent.
+ * already published is never modified beyond uploading assets that are absent, except
+ * on taskcluster/staging-releases, where it is deleted and drafted afresh.
+ *
+ * `commitish` is the commit the tag is created on when the release is published (if
+ * the tag does not exist yet); without it GitHub uses the default branch.
  */
-export const draftRelease = async ({ ctx, octokit, dir, files, changelog, sleep, log = console.log }) => {
+export const draftRelease = async ({ ctx, octokit, dir, files, changelog, commitish, sleep, log = console.log }) => {
   const { owner, repo, tag } = ctx;
   const names = new Set(files.map(f => f.file));
   const missing = requiredAssets(ctx.version).filter(n => !names.has(n));
   if (missing.length) {
     throw new Error(`build artifacts are missing required release assets: ${missing.join(', ')}`);
   }
+  if (![...names].some(n => n.startsWith('generic-worker-'))) {
+    throw new Error('build artifacts contain no generic-worker-* binaries');
+  }
 
   let outcome = 'up-to-date';
   let release = await findRelease({ octokit, owner, repo, tag });
+  if (release && !release.draft && mayReplacePublished(ctx)) {
+    await deletePublishedRelease({ octokit, owner, repo, tag, release, log });
+    release = undefined;
+  }
   if (!release) {
     // Each attempt looks for the release first, so a createRelease whose response was lost
     // (but which did create the draft) cannot result in a second draft. The plugin's own
@@ -83,6 +120,7 @@ export const draftRelease = async ({ ctx, octokit, dir, files, changelog, sleep,
           body: changelog,
           draft: true,
           prerelease: false,
+          ...(commitish ? { target_commitish: commitish } : {}),
           request: { retries: 0 },
         });
         return data;

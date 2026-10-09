@@ -1,4 +1,5 @@
 meta:
+  # keep in sync with the uv download URL and sha256 in the pypi task command (taskcluster/kinds/release-publish/kind.yml)
   - &uv_version 0.12.8
 
 loader: taskgraph.loader.transform:loader

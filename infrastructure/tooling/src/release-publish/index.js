@@ -51,7 +51,15 @@ STEPS['github-release-draft'] = async ({ ctx, octokit, workDir, fetchArtifacts }
   const changelog = ctx.staging
     ? '(staging release)'
     : extractChangelog(fs.readFileSync(path.join(REPO_ROOT, 'CHANGELOG.md'), 'utf8'), ctx.version);
-  const outcome = await draftRelease({ ctx, octokit, dir: workDir, files, changelog });
+  // GITHUB_SHA is set to the pushed commit on every release task; the tag is created there
+  const outcome = await draftRelease({
+    ctx,
+    octokit,
+    dir: workDir,
+    files,
+    changelog,
+    commitish: process.env.GITHUB_SHA,
+  });
   // publish as an artifact for github-release-publish
   const out = path.join(REPO_ROOT, 'release-out');
   fs.mkdirSync(out, { recursive: true });

@@ -43,10 +43,14 @@ it creates a new task that nothing downstream waits for. When the rerun succeeds
 waiting tasks continue automatically. Release tasks have a 4-day deadline; after that,
 reruns are refused and the release must be finished by re-pushing the tag
 (delete and recreate it) to start a new graph.
-Re-pushing the tag only works if no `push-image-*` task has succeeded yet. If some images were
-already pushed, the new graph's push tasks for those images will fail by design (the rebuilt image
-has a different digest), and the way forward is a new patch release (`yarn release` again, which
-bumps the version) rather than re-tagging.
+
+Re-pushing the tag only works if no `push-image-*` task has succeeded yet and
+`github-release-publish` has not run. If some images were already pushed, the new graph's push
+tasks for those images will fail by design (the rebuilt image has a different digest). If
+`github-release-publish` has run, the GitHub release is public and the new graph's
+`github-release-draft` task refuses to change its assets (the rebuilt binaries differ). In either
+case the way forward is a new patch release (`yarn release` again, which bumps the version)
+rather than re-tagging.
 
 Never rerun an `image-*` build after its `push-image-*` task has succeeded. The rebuilt image
 has a different digest, so the push task will (correctly) refuse to overwrite the tag.
