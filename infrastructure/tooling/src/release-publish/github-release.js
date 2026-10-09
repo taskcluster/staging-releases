@@ -39,9 +39,21 @@ export const findRelease = async ({ octokit, owner, repo, tag }) => {
 const listAssets = (octokit, owner, repo, release_id) =>
   octokit.paginate(octokit.repos.listReleaseAssets, { owner, repo, release_id, per_page: 100 });
 
+// A 404 means the asset is already gone, which is what we wanted.
+const deleteAsset = async (octokit, owner, repo, asset_id) => {
+  try {
+    await octokit.repos.deleteReleaseAsset({ owner, repo, asset_id });
+  } catch (err) {
+    if (err.status !== 404) {
+      throw err;
+    }
+  }
+};
+
 /**
  * Create (or reuse) the draft release and make its assets match `files`. Safe to
- * rerun: complete assets are kept, and partial ones are replaced.
+ * rerun: complete assets are kept, and partial ones are replaced. A release that is
+ * already published is never modified beyond uploading assets that are absent.
  */
 export const draftRelease = async ({ ctx, octokit, dir, files, changelog, sleep, log = console.log }) => {
   const { owner, repo, tag } = ctx;
@@ -54,45 +66,75 @@ export const draftRelease = async ({ ctx, octokit, dir, files, changelog, sleep,
   let outcome = 'up-to-date';
   let release = await findRelease({ octokit, owner, repo, tag });
   if (!release) {
-    ({ data: release } = await octokit.repos.createRelease({
-      owner,
-      repo,
-      tag_name: tag,
-      name: tag,
-      body: changelog,
-      draft: true,
-      prerelease: false,
-    }));
+    // Each attempt looks for the release first, so a createRelease whose response was lost
+    // (but which did create the draft) cannot result in a second draft. The plugin's own
+    // retry is disabled for this call for the same reason.
+    release = await withRetry(
+      async () => {
+        const found = await findRelease({ octokit, owner, repo, tag });
+        if (found) {
+          return found;
+        }
+        const { data } = await octokit.repos.createRelease({
+          owner,
+          repo,
+          tag_name: tag,
+          name: tag,
+          body: changelog,
+          draft: true,
+          prerelease: false,
+          request: { retries: 0 },
+        });
+        return data;
+      },
+      { sleep, log, label: `create release ${tag}` }
+    );
     outcome = 'created';
   } else if (!release.draft) {
-    log(`release ${tag} is already published; checking its assets only`);
+    log(`release ${tag} is already published; its existing assets will not be modified`);
   }
+  const isDraft = Boolean(release.draft);
 
   const existing = new Map((await listAssets(octokit, owner, repo, release.id)).map(a => [a.name, a]));
   for (const { file, size } of files) {
     const current = existing.get(file);
-    // failed uploads linger with state 'starter'/'open'; only 'uploaded' counts
     if (current && current.size === size && current.state === 'uploaded') {
       continue;
+    }
+    if (current && !isDraft) {
+      // never touch the assets of a published release
+      throw Object.assign(
+        new Error(
+          `published release ${tag} has asset ${file} with size ${current.size} and state ${current.state}, ` +
+            `expected ${size} bytes in state uploaded; refusing to modify a published release`
+        ),
+        { retriable: false }
+      );
     }
     if (outcome === 'up-to-date') {
       outcome = 'updated';
     }
-    if (current) {
-      log(`replacing incomplete asset ${file} (${current.size}/${size} bytes, state ${current.state})`);
-      await octokit.repos.deleteReleaseAsset({ owner, repo, asset_id: current.id });
-    }
     const data = fs.readFileSync(path.join(dir, file));
     await withRetry(
-      () =>
-        octokit.repos.uploadReleaseAsset({
+      async () => {
+        if (isDraft) {
+          // A dropped upload leaves an incomplete asset of this name behind ('starter'/'open'),
+          // which makes every further upload fail with already_exists; clear it first.
+          const leftovers = (await listAssets(octokit, owner, repo, release.id)).filter(a => a.name === file);
+          for (const leftover of leftovers) {
+            log(`removing incomplete asset ${file} (${leftover.size}/${size} bytes, state ${leftover.state})`);
+            await deleteAsset(octokit, owner, repo, leftover.id);
+          }
+        }
+        return octokit.repos.uploadReleaseAsset({
           owner,
           repo,
           release_id: release.id,
           name: file,
           data,
           headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
-        }),
+        });
+      },
       { sleep, log, label: `upload ${file}` }
     );
   }

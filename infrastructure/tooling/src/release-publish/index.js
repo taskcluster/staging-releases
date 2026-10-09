@@ -3,11 +3,25 @@ import os from 'node:os';
 import path from 'node:path';
 import taskcluster from '@taskcluster/client';
 import { Octokit } from '@octokit/rest';
+import { retry } from '@octokit/plugin-retry';
+import { throttling } from '@octokit/plugin-throttling';
 import { loadContext, loadCredentials } from './context.js';
 import { fetchDependencyArtifacts } from './artifacts.js';
 import { pushImage, startScratchRegistry } from './push-image.js';
 import { draftRelease, publishRelease, extractChangelog } from './github-release.js';
 import { REPO_ROOT } from '../utils/index.js';
+
+const PluggedOctokit = Octokit.plugin(retry, throttling);
+
+// retry rate-limited requests a few times, logging each one
+const onRateLimit = (retryAfter, options, _octokit, retryCount) => {
+  const again = retryCount < 3;
+  console.log(
+    `GitHub rate limit hit for ${options.method} ${options.url}; ` +
+      (again ? `retrying (${retryCount + 1}/3) after ${retryAfter}s` : 'giving up')
+  );
+  return again;
+};
 
 // step name -> async ({ ctx, creds, octokit, workDir, fetchArtifacts, name }) => outcome string
 const STEPS = {};
@@ -68,7 +82,10 @@ export const runStep = async ({ step, name }) => {
   const queue = new taskcluster.Queue({ rootUrl });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `release-${step}-`));
   const fetchArtifacts = prefix => fetchDependencyArtifacts({ queue, taskId: ctx.taskId, prefix, destDir: workDir });
-  const octokit = new Octokit({ auth: creds.ghToken });
+  const octokit = new PluggedOctokit({
+    auth: creds.ghToken,
+    throttle: { onRateLimit, onSecondaryRateLimit: onRateLimit },
+  });
 
   const outcome = await impl({ ctx, creds, octokit, workDir, fetchArtifacts, name });
   console.log(`${step}${name ? ` ${name}` : ''}: ${outcome}`);
