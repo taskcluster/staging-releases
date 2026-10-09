@@ -1,6 +1,7 @@
 import os from 'node:os';
 import { TaskGraph, Lock, ConsoleRenderer, LogRenderer } from 'console-taskgraph';
 import generateReleaseTasks from './tasks.js';
+import { gitDescribe, REPO_ROOT } from '../utils/index.js';
 
 export class Release {
   constructor(cmdOptions) {
@@ -38,10 +39,14 @@ export class Release {
     const context = await taskgraph.run();
 
     console.log(`Release version: ${context['release-version']}`);
+    const { revision } = await gitDescribe({ dir: REPO_ROOT });
     if (staging) {
       console.log(`Pushed to ${context['target-staging-release']}`);
+      console.log(`Watch the release graph: https://github.com/taskcluster/staging-releases/commit/${revision}/checks`);
     } else if (!this.cmdOptions.push) {
       console.log('NOTE: image, git commit + tags, and packages not pushed due to --no-push option');
+    } else {
+      console.log(`Watch the release graph: https://github.com/taskcluster/taskcluster/commit/${revision}/checks`);
     }
   }
 }
