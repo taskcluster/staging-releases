@@ -16,7 +16,7 @@ const waitForUrl = (url, { sleep, log }) =>
         throw new Error(`${url} returned ${res.status}`);
       }
     },
-    { attempts: 10, baseMs: 3000, sleep, log, label: `HEAD ${url}` }
+    { attempts: 8, baseMs: 3000, sleep, log, label: `HEAD ${url}` }
   );
 
 /**
@@ -24,6 +24,9 @@ const waitForUrl = (url, { sleep, log }) =>
  * every download URL it names is publicly reachable, so `brew upgrade` never 404s.
  */
 export const publishHomebrew = async ({ ctx, octokit, cask, sleep, log = console.log }) => {
+  if (ctx.staging) {
+    throw Object.assign(new Error('publish-homebrew must never run for staging releases'), { retriable: false });
+  }
   if (!cask.includes(`version "${ctx.version}"`)) {
     throw new Error(`cask does not declare version "${ctx.version}" (snapshot build?)`);
   }
@@ -42,6 +45,11 @@ export const publishHomebrew = async ({ ctx, octokit, cask, sleep, log = console
     if (err.status !== 404) {
       throw err;
     }
+  }
+  if (current && (Array.isArray(current) || current.type !== 'file')) {
+    throw Object.assign(new Error(`${TAP.owner}/${TAP.repo}:${TAP.path} is not a regular file`), {
+      retriable: false,
+    });
   }
   if (current && Buffer.from(current.content, 'base64').toString() === cask) {
     return 'up-to-date';
