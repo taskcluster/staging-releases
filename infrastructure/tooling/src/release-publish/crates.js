@@ -35,9 +35,10 @@ const AUTH_FAILURE = /401|403|unauthorized|invalid token|token is invalid/i;
 /**
  * Run one `cargo publish` invocation with retries. A retry after a partially-successful
  * attempt (upload succeeded, then the connection dropped) sees "already uploaded", which
- * means the crate is published; auth failures are not retried.
+ * means the crate is published, provided `confirm` (if given) agrees; auth failures are
+ * not retried.
  */
-const cargoPublish = ({ command, cwd, token, exec, sleep, log, label }) =>
+const cargoPublish = ({ command, cwd, token, exec, sleep, log, label, confirm }) =>
   withRetry(
     async () => {
       const r = await exec(command, { cwd, env: { ...process.env, CARGO_REGISTRY_TOKEN: token } });
@@ -46,8 +47,11 @@ const cargoPublish = ({ command, cwd, token, exec, sleep, log, label }) =>
       }
       const stderr = r.stderr.trim();
       if (ALREADY_PUBLISHED.test(stderr)) {
-        log(`${label}: crates.io already has this version; treating as published`);
-        return;
+        if (!confirm || (await confirm())) {
+          log(`${label}: crates.io already has this version; treating as published`);
+          return;
+        }
+        throw new Error(`${label} failed, and crates.io does not have this version: ${stderr}`);
       }
       throw Object.assign(new Error(`${label} failed: ${stderr}`), {
         retriable: !AUTH_FAILURE.test(stderr),
@@ -86,6 +90,7 @@ export const publishCrates = async ({ ctx, creds, rustDir, exec = realExec, slee
       sleep,
       log,
       label: `cargo publish ${name}`,
+      confirm: () => crateVersionExists(name, ctx.version, { sleep, log }),
     });
     result[name] = 'published';
   }
