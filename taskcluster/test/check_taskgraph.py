@@ -242,6 +242,55 @@ def check_cron_graph(tasks):
         raise RuntimeError("Invalid cron task graph:\n- " + "\n- ".join(errors))
 
 
+RELEASE_PARAMETERS = "release-tag.yml"
+STAGING_PARAMETERS = "staging-release.yml"
+
+RELEASE_BUILD_NAMES = {
+    "image-monoimage",
+    "image-monoimage-devel",
+    "image-generic-worker",
+    "image-livelog",
+    "image-taskcluster-proxy",
+    "image-websocktunnel",
+    "binaries-generic-worker",
+    "binaries-worker-runner",
+    "binaries-livelog",
+    "binaries-taskcluster-proxy",
+    "binaries-client-shell",
+    "npm-client",
+    "npm-client-web",
+}
+
+
+def release_kind_tasks(tasks, kind):
+    return {label: task for label, task in tasks.items() if task.get("kind") == kind}
+
+
+def check_release_build(tasks, graph_name, staging):
+    errors = []
+    builds = release_kind_tasks(tasks, "release-build")
+    expected = {f"release-build-{name}" for name in RELEASE_BUILD_NAMES}
+    if missing := sorted(expected - set(builds)):
+        errors.append("missing release builds: " + ", ".join(missing))
+    for label, task in builds.items():
+        definition = task["task"]
+        scopes = [scope_text(scope) for scope in definition.get("scopes", [])]
+        if secret := [s for s in scopes if s.startswith("secrets:")]:
+            errors.append(f"{label} must not have secret scopes: {secret}")
+        if definition.get("workerType") != "release":
+            errors.append(f"{label} must run on the release pool")
+        env = definition.get("payload", {}).get("env", {})
+        if env.get("RELEASE_VERSION") != "113.2.0":
+            errors.append(f"{label} has RELEASE_VERSION {env.get('RELEASE_VERSION')!r}")
+        if (env.get("STAGING") == "1") != staging:
+            errors.append(f"{label} has STAGING={env.get('STAGING')!r}")
+    devel = builds.get("release-build-image-monoimage-devel", {})
+    if "release-build-image-monoimage" not in devel.get("dependencies", {}).values():
+        errors.append("image-monoimage-devel must depend on image-monoimage")
+    if errors:
+        raise RuntimeError(f"Invalid {graph_name} task graph:\n- " + "\n- ".join(errors))
+
+
 def main():
     task_reference_scope = {"task-reference": "secrets:get:<dependency>"}
     if not production_is_secret_scope(task_reference_scope):
@@ -270,6 +319,15 @@ def main():
     print(f"Generated cron task graph with {len(tasks)} tasks")
     check_cron_graph(tasks)
     print("Cron task graph selects only the attested-document job")
+
+    for parameter_file, graph_name, staging in (
+        (RELEASE_PARAMETERS, "release", False),
+        (STAGING_PARAMETERS, "staging release", True),
+    ):
+        tasks = generate_target_graph(PARAMETERS_DIR / parameter_file, version)
+        print(f"Generated {graph_name} task graph with {len(tasks)} tasks")
+        check_release_build(tasks, graph_name, staging)
+        print(f"{graph_name} graph has the expected build tasks")
 
 
 if __name__ == "__main__":
