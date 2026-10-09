@@ -10,12 +10,19 @@ export const loadContext = env => {
   if (!match) {
     throw new Error(`RELEASE_REPO must be owner/repo; got ${JSON.stringify(env.RELEASE_REPO)}`);
   }
+  const staging = env.STAGING === '1';
+  if ((match[2] === 'staging-releases') !== staging) {
+    throw new Error(
+      `STAGING (${JSON.stringify(env.STAGING)}) does not match RELEASE_REPO ${JSON.stringify(env.RELEASE_REPO)}; ` +
+        'staging-releases must be used with STAGING=1 and only with it'
+    );
+  }
   return {
     version,
     tag: `v${version}`,
     owner: match[1],
     repo: match[2],
-    staging: env.STAGING === '1',
+    staging,
     taskId: env.TASK_ID,
   };
 };

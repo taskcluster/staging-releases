@@ -28,11 +28,19 @@ export const fetchDependencyArtifacts = async ({ queue, taskId, prefix, destDir,
           continue;
         }
         const fileName = name.slice(prefix.length);
+        if (!fileName || fileName === '.' || fileName === '..' || fileName !== path.basename(fileName)) {
+          throw new Error(
+            `refusing artifact ${JSON.stringify(name)}: ${JSON.stringify(fileName)} is not a plain file name`
+          );
+        }
+        const file = path.join(destDir, fileName);
+        if (!path.resolve(destDir, fileName).startsWith(path.resolve(destDir) + path.sep)) {
+          throw new Error(`refusing artifact ${JSON.stringify(name)}: destination escapes ${destDir}`);
+        }
         if (seen.has(fileName)) {
           throw new Error(`artifact ${fileName} is produced by both ${seen.get(fileName)} and ${depId}`);
         }
         seen.set(fileName, depId);
-        const file = path.join(destDir, fileName);
         await download({ queue, taskId: depId, name, file });
         result.push({ taskId: depId, name, file: fileName, size: fs.statSync(file).size });
       }

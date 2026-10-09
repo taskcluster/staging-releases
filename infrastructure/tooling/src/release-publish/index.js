@@ -18,9 +18,15 @@ export const runStep = async ({ step, name }) => {
   if (!proxyUrl) {
     throw new Error('release:step must run in a task with taskcluster-proxy enabled');
   }
+  const rootUrl = process.env.TASKCLUSTER_ROOT_URL;
+  if (!rootUrl) {
+    throw new Error('release:step requires TASKCLUSTER_ROOT_URL to be set');
+  }
   const ctx = loadContext(process.env);
   const creds = await loadCredentials({ staging: ctx.staging, proxyUrl });
-  const queue = new taskcluster.Queue({ rootUrl: proxyUrl });
+  // Talk to the queue directly, without credentials: release-build artifacts are public, and the
+  // proxy would re-sign object-service download requests with the task's own credentials, breaking them.
+  const queue = new taskcluster.Queue({ rootUrl });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `release-${step}-`));
   const fetchArtifacts = prefix => fetchDependencyArtifacts({ queue, taskId: ctx.taskId, prefix, destDir: workDir });
   const octokit = new Octokit({ auth: creds.ghToken });
