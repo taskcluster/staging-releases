@@ -9,6 +9,7 @@ import { loadContext, loadCredentials } from './context.js';
 import { fetchDependencyArtifacts } from './artifacts.js';
 import { pushImage, startScratchRegistry } from './push-image.js';
 import { draftRelease, publishRelease, extractChangelog } from './github-release.js';
+import { publishPypi } from './pypi.js';
 import { REPO_ROOT } from '../utils/index.js';
 
 const PluggedOctokit = Octokit.plugin(retry, throttling);
@@ -60,6 +61,10 @@ STEPS['github-release-publish'] = async ({ ctx, octokit, workDir, fetchArtifacts
   await fetchArtifacts('public/build/');
   const expected = JSON.parse(fs.readFileSync(path.join(workDir, 'expected-assets.json'), 'utf8'));
   return publishRelease({ ctx, octokit, expected });
+};
+
+STEPS['publish-pypi'] = async ({ ctx, creds }) => {
+  return publishPypi({ ctx, creds, clientDir: path.join(REPO_ROOT, 'clients', 'client-py') });
 };
 
 export const runStep = async ({ step, name }) => {

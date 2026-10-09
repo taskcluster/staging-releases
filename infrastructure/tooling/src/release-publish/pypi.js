@@ -1,0 +1,88 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { exec as realExec } from './exec.js';
+import { withRetry } from './retry.js';
+
+const OUT_DIR = 'release-dist';
+
+export const publishedFiles = async (version, { sleep, log } = {}) =>
+  withRetry(
+    async () => {
+      const res = await fetch(`https://pypi.org/pypi/taskcluster/${version}/json`);
+      if (res.status === 404) {
+        return new Map();
+      }
+      if (!res.ok) {
+        throw new Error(`PyPI returned ${res.status}`);
+      }
+      const { urls } = await res.json();
+      return new Map(urls.map(u => [u.filename, u.digests?.sha256]));
+    },
+    { sleep, log, label: 'query PyPI' }
+  );
+
+/**
+ * Build the Python client and upload whichever of its files PyPI doesn't have yet.
+ * PyPI never accepts a re-upload of an existing filename, so a filename that's
+ * already present counts as done even if a rebuild hashes differently.
+ */
+export const publishPypi = async ({ ctx, creds, clientDir, exec = realExec, sleep, log = console.log }) => {
+  const build = await exec(['uv', 'build', '--out-dir', OUT_DIR], { cwd: clientDir });
+  if (build.code !== 0) {
+    throw new Error(`uv build failed: ${build.stderr}`);
+  }
+  const dist = path.join(clientDir, OUT_DIR);
+  const files = fs.readdirSync(dist).filter(f => f.endsWith('.whl') || f.endsWith('.tar.gz'));
+  if (ctx.staging) {
+    log(`staging: built ${files.join(', ')}; not uploading`);
+    return 'dry-run';
+  }
+
+  const published = await publishedFiles(ctx.version, { sleep, log });
+  const toUpload = [];
+  for (const file of files) {
+    if (!published.has(file)) {
+      toUpload.push(path.join(dist, file));
+      continue;
+    }
+    const local = crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(path.join(dist, file)))
+      .digest('hex');
+    if (published.get(file) && published.get(file) !== local) {
+      log(
+        `warning: ${file} is already on PyPI with a different sha256 (rebuilds are not byte-reproducible); keeping the published file`
+      );
+    }
+  }
+  if (toUpload.length === 0) {
+    return 'exists';
+  }
+
+  // --check-url makes uv skip files already on the index, so a retry after a partial upload succeeds
+  await withRetry(
+    async () => {
+      const r = await exec(
+        [
+          'uv',
+          'publish',
+          '--publish-url',
+          'https://upload.pypi.org/legacy/',
+          '--check-url',
+          'https://pypi.org/simple/',
+          ...toUpload,
+        ],
+        {
+          cwd: clientDir,
+          env: { ...process.env, UV_PUBLISH_USERNAME: creds.pypiUsername, UV_PUBLISH_PASSWORD: creds.pypiPassword },
+        }
+      );
+      if (r.code !== 0) {
+        throw new Error(`uv publish failed: ${r.stderr.trim()}`);
+      }
+    },
+    { sleep, log, label: 'uv publish' }
+  );
+  return 'published';
+};
