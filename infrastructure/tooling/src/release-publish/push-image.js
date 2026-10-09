@@ -13,6 +13,8 @@ export const REGISTRY_IMAGE = 'registry@sha256:a3d8aaa63ed8681a604f1dea0aa03f100
 
 /** Start a local registry on 127.0.0.1:5000 and return a function that removes it. */
 export const startScratchRegistry = async ({ exec = realExec } = {}) => {
+  // a leftover container from a killed run would make `docker run` fail with "name already in use"
+  await exec(['docker', 'rm', '-f', 'release-scratch-registry']);
   const r = await exec([
     'docker',
     'run',
@@ -45,7 +47,24 @@ export const configDigestFromManifest = text => {
   return manifest.config.digest;
 };
 
-const notFound = stderr => /manifest unknown|not found|name unknown/i.test(stderr);
+// Exit codes 125-127 come from `docker run` itself (daemon error, command cannot be invoked or
+// found), so whatever they print says nothing about the tag. Only a real registry answer counts.
+const DOCKER_RUN_FAILURE_CODES = new Set([125, 126, 127]);
+const notFound = ({ code, stderr }) =>
+  !DOCKER_RUN_FAILURE_CODES.has(code) && /manifest unknown|name unknown/i.test(stderr);
+
+// The destination comes from this table, never from the build artifact: the push runs with
+// Docker Hub credentials, so a tampered `.tag` file must not be able to redirect it.
+const EXPECTED_TAGS = {
+  monoimage: version => `taskcluster/taskcluster:v${version}`,
+  'monoimage-devel': version => `taskcluster/taskcluster:v${version}-devel`,
+  'generic-worker': version => `taskcluster/generic-worker:v${version}`,
+  livelog: version => `taskcluster/livelog:v${version}`,
+  'taskcluster-proxy': version => `taskcluster/taskcluster-proxy:v${version}`,
+  websocktunnel: version => `taskcluster/websocktunnel:v${version}`,
+};
+
+const fatal = message => Object.assign(new Error(message), { retriable: false });
 
 /**
  * Push one image archive built by release-build to Docker Hub. Safe to rerun: an
@@ -63,9 +82,19 @@ export const pushImage = async ({
   sleep,
   log = console.log,
 }) => {
+  if (!Object.hasOwn(EXPECTED_TAGS, name)) {
+    throw fatal(`unknown image name ${name}; expected one of ${Object.keys(EXPECTED_TAGS).join(', ')}`);
+  }
+  const tag = EXPECTED_TAGS[name](ctx.version);
   const read = suffix => fs.readFileSync(path.join(dir, `${name}${suffix}`), 'utf8').trim();
-  const tag = read('.tag');
+  const recordedTag = read('.tag');
+  if (recordedTag !== tag) {
+    throw fatal(`build record tag ${recordedTag} does not match expected tag ${tag} for ${name}`);
+  }
   const localDigest = read('.digest');
+  if (!/^sha256:[0-9a-f]{64}$/.test(localDigest)) {
+    throw fatal(`build record digest for ${name} is malformed: ${localDigest}`);
+  }
   const remoteRef = `docker://${registry}/${tag}`;
 
   const authDir = fs.mkdtempSync(path.join(dir, 'auth-'));
@@ -109,27 +138,25 @@ export const pushImage = async ({
       throw new Error(`archive config digest ${archiveDigest} does not match build record ${localDigest}`);
     }
 
-    const remoteDigest = () =>
-      withRetry(
-        async () => {
-          const r = await skopeo([
-            'inspect',
-            '--raw',
-            '--authfile',
-            '/auth/auth.json',
-            `--tls-verify=${tlsVerify}`,
-            remoteRef,
-          ]);
-          if (r.code === 0) {
-            return configDigestFromManifest(r.stdout);
-          }
-          if (notFound(r.stderr)) {
-            return null;
-          }
-          throw new Error(`skopeo inspect ${tag}: ${r.stderr.trim()}`);
-        },
-        { sleep, log, label: `inspect ${tag}` }
-      );
+    // resolves to the registry's config digest, or null if the tag does not exist
+    const inspectOnce = async () => {
+      const r = await skopeo([
+        'inspect',
+        '--raw',
+        '--authfile',
+        '/auth/auth.json',
+        `--tls-verify=${tlsVerify}`,
+        remoteRef,
+      ]);
+      if (r.code === 0) {
+        return configDigestFromManifest(r.stdout);
+      }
+      if (notFound(r)) {
+        return null;
+      }
+      throw new Error(`skopeo inspect ${tag} (exit ${r.code}): ${r.stderr.trim()}`);
+    };
+    const remoteDigest = () => withRetry(inspectOnce, { sleep, log, label: `inspect ${tag}` });
 
     const existing = await remoteDigest();
     if (existing === localDigest) {
@@ -159,12 +186,23 @@ export const pushImage = async ({
       { sleep, log, label: `push ${tag}` }
     );
 
-    const pushed = await remoteDigest();
+    // registries can lag briefly after a push, so keep looking while the tag still reads as absent
+    const pushed = await withRetry(
+      async () => {
+        const digest = await inspectOnce();
+        if (digest === null) {
+          throw new Error(`${tag} not yet visible on ${registry} after push`);
+        }
+        return digest;
+      },
+      { sleep, log, label: `verify ${tag}` }
+    );
     if (pushed !== localDigest) {
       throw new Error(`after push, ${tag} has config digest ${pushed}, expected ${localDigest}`);
     }
     return 'pushed';
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(path.join(dir, `${name}.tar`), { force: true });
   }
 };
