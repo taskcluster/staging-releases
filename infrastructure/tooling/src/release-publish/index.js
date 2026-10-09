@@ -6,6 +6,8 @@ import { Octokit } from '@octokit/rest';
 import { loadContext, loadCredentials } from './context.js';
 import { fetchDependencyArtifacts } from './artifacts.js';
 import { pushImage, startScratchRegistry } from './push-image.js';
+import { draftRelease, publishRelease, extractChangelog } from './github-release.js';
+import { REPO_ROOT } from '../utils/index.js';
 
 // step name -> async ({ ctx, creds, octokit, workDir, fetchArtifacts, name }) => outcome string
 const STEPS = {};
@@ -25,6 +27,25 @@ STEPS['push-image'] = async ({ ctx, creds, workDir, fetchArtifacts, name }) => {
   } finally {
     await stop();
   }
+};
+
+STEPS['github-release-draft'] = async ({ ctx, octokit, workDir, fetchArtifacts }) => {
+  const files = await fetchArtifacts('public/build/');
+  const changelog = ctx.staging
+    ? '(staging release)'
+    : extractChangelog(fs.readFileSync(path.join(REPO_ROOT, 'CHANGELOG.md'), 'utf8'), ctx.version);
+  const outcome = await draftRelease({ ctx, octokit, dir: workDir, files, changelog });
+  // publish as an artifact for github-release-publish
+  const out = path.join(REPO_ROOT, 'release-out');
+  fs.mkdirSync(out, { recursive: true });
+  fs.copyFileSync(path.join(workDir, 'expected-assets.json'), path.join(out, 'expected-assets.json'));
+  return outcome;
+};
+
+STEPS['github-release-publish'] = async ({ ctx, octokit, workDir, fetchArtifacts }) => {
+  await fetchArtifacts('public/build/');
+  const expected = JSON.parse(fs.readFileSync(path.join(workDir, 'expected-assets.json'), 'utf8'));
+  return publishRelease({ ctx, octokit, expected });
 };
 
 export const runStep = async ({ step, name }) => {
