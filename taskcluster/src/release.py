@@ -93,12 +93,6 @@ _TOOLCHAINS = {
     ),
 }
 
-# goreleaser and `git describe` need tags, which a shallow fetch lacks.
-_FULL_CLONE = [
-    "git clone --quiet --no-single-branch --tags {head_repository} taskcluster",
-    "cd taskcluster",
-    "git checkout --quiet {head_rev}",
-]
 _SHALLOW_CLONE = [
     "git init --quiet taskcluster",
     "cd taskcluster",
@@ -107,12 +101,24 @@ _SHALLOW_CLONE = [
     "git fetch --quiet --depth=1 origin {head_rev}",
     "git checkout --quiet FETCH_HEAD",
 ]
+# Go stamps a binary's module version from a vX.Y.Z tag at HEAD (otherwise it
+# records a pseudo-version), and goreleaser needs that tag to run in release
+# mode. A release's shallow fetch has no tags, so fetch the release tag.
+# Staging has no release tag, so it tags HEAD locally and never pushes it.
+_FETCH_RELEASE_TAG = (
+    "git fetch --quiet --depth=1 {head_repository} "
+    "refs/tags/v${{RELEASE_VERSION}}:refs/tags/v${{RELEASE_VERSION}}"
+)
+_LOCAL_STAGING_TAG = "git tag -f v${{RELEASE_VERSION}}"
+# A release must build the commit its tag points at; fail the task otherwise.
+_VERIFY_RELEASE_TAG = 'test "$(git rev-parse "v${{RELEASE_VERSION}}^{{commit}}")" = "$(git rev-parse HEAD)"'
 
 
-def toolchain_setup(toolchains, yarn_install, full_clone):
+def toolchain_setup(toolchains, yarn_install, staging):
     """Return (install lines, mounts) for a release task that needs the given
     toolchains (a subset of go, rust, node, uv). Toolchains are always installed
-    in the order go, rust, node, uv, then the checkout, then `yarn --immutable`."""
+    in the order go, rust, node, uv, then the checkout (with the vX.Y.Z tag at
+    HEAD), then `yarn --immutable`."""
     if unknown := sorted(set(toolchains) - set(_TOOLCHAINS)):
         raise ValueError(f"unknown release toolchains: {unknown}")
     if yarn_install and "node" not in toolchains:
@@ -122,7 +128,12 @@ def toolchain_setup(toolchains, yarn_install, full_clone):
         if name in toolchains:
             mounts.append(dict(mount, content=dict(mount["content"])))
             install.extend(lines)
-    install.extend(_FULL_CLONE if full_clone else _SHALLOW_CLONE)
+    install.extend(_SHALLOW_CLONE)
+    if staging:
+        install.append(_LOCAL_STAGING_TAG)
+    else:
+        install.append(_FETCH_RELEASE_TAG)
+        install.append(_VERIFY_RELEASE_TAG)
     if yarn_install:
         install.append("yarn --immutable")
     return install, mounts

@@ -54,13 +54,16 @@ toolchain = TransformSequence()
 @toolchain.add
 def add_toolchain(config, tasks):
     """Install only what each task opts into: `release-toolchains` (subset of
-    go, rust, node, uv), `yarn-install` (monorepo `yarn --immutable`, needs
-    node) and `full-clone` (all branches and tags instead of a depth-1 fetch)."""
+    go, rust, node, uv) and `yarn-install` (monorepo `yarn --immutable`, needs
+    node). Runs after select_release_tasks, so this is a release or staging push."""
+    info = release_info(
+        config.params["head_ref"], config.params["tasks_for"], config.params["project"]
+    )
     for task in tasks:
         install, mounts = toolchain_setup(
             task.pop("release-toolchains", []),
             yarn_install=task.pop("yarn-install", False),
-            full_clone=task.pop("full-clone", False),
+            staging=info.staging,
         )
         task["run"]["install"] = install
         worker = task.setdefault("worker", {})

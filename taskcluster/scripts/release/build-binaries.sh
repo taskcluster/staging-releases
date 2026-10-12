@@ -21,14 +21,11 @@ case "$target" in
     (cd tools/taskcluster-proxy && ./dockerbuild.sh "$out")
     ;;
   client-shell)
-    # Staging branches carry no release tag, so goreleaser can only snapshot.
-    # Publishing (including the Homebrew tap) is skipped here: publish-homebrew
-    # commits the cask only after the GitHub release is public.
-    if [ "${STAGING:-}" = "1" ]; then
-      go tool goreleaser release --clean --snapshot
-    else
-      go tool goreleaser release --clean --skip=publish,announce
-    fi
+    # Staging checkouts carry a local (never pushed) release tag, so goreleaser
+    # runs in release mode there too. Publishing (including the Homebrew tap)
+    # is always skipped here: publish-homebrew commits the cask only after the
+    # GitHub release is public.
+    go tool goreleaser release --clean --skip=publish,announce
     mv dist/taskcluster-*.tar.gz dist/taskcluster-*.zip "$out/"
     test -f dist/homebrew/Casks/taskcluster.rb
     ;;

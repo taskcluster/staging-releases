@@ -436,6 +436,41 @@ def check_release_toolchains(tasks, graph_name):
         raise RuntimeError(f"Invalid {graph_name} task graph:\n- " + "\n- ".join(errors))
 
 
+BUILD_BINARIES_SCRIPT = REPO_ROOT / "taskcluster" / "scripts" / "release" / "build-binaries.sh"
+
+
+def check_release_tag(tasks, graph_name, staging):
+    """Release builds must see the vX.Y.Z tag at HEAD so Go stamps the release
+    version (not a pseudo-version) and goreleaser runs in release mode.
+    Releases fetch the real tag into shallow clones; staging tags HEAD locally."""
+    errors = []
+    tag_fetch = "refs/tags/v113.2.0"
+    local_tag = "git tag -f v113.2.0"
+    for label, task in sorted(tasks.items()):
+        if task["task"].get("workerType") != "release":
+            continue
+        payload = task["task"].get("payload", {})
+        command = " ".join(str(part) for part in payload.get("command", []))
+        command = command.replace("${RELEASE_VERSION}", payload.get("env", {}).get("RELEASE_VERSION", ""))
+        full_clone = "--no-single-branch" in command
+        if staging:
+            if local_tag not in command:
+                errors.append(f"{label} does not create the local staging tag ({local_tag})")
+            if tag_fetch in command:
+                errors.append(f"{label} fetches a release tag in staging")
+        else:
+            if local_tag in command:
+                errors.append(f"{label} creates a local tag in a real release")
+            if not full_clone and tag_fetch not in command:
+                errors.append(f"{label} shallow clone does not fetch {tag_fetch}")
+        if label == "release-build-binaries-client-shell" and "--snapshot" in command:
+            errors.append(f"{label} runs goreleaser with --snapshot")
+    if "--snapshot" in BUILD_BINARIES_SCRIPT.read_text():
+        errors.append(f"{BUILD_BINARIES_SCRIPT.name} still runs goreleaser with --snapshot")
+    if errors:
+        raise RuntimeError(f"Invalid {graph_name} task graph:\n- " + "\n- ".join(errors))
+
+
 def check_no_release_tasks(tasks, graph_name):
     if release := sorted(label for label, t in tasks.items() if t.get("kind", "").startswith("release")):
         raise RuntimeError(f"{graph_name} graph contains release tasks: " + ", ".join(release))
@@ -493,6 +528,8 @@ def main():
         print(f"{graph_name} graph has the expected gated release pipeline")
         check_release_toolchains(tasks, graph_name)
         print(f"{graph_name} graph installs only the toolchains each task needs")
+        check_release_tag(tasks, graph_name, staging)
+        print(f"{graph_name} graph builds with the v113.2.0 tag at HEAD")
 
     tasks = generate_target_graph(PARAMETERS_DIR / MAIN_PUSH_PARAMETERS, version)
     check_no_release_tasks(tasks, "main push")

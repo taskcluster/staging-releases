@@ -89,8 +89,6 @@ tasks:
       command: taskcluster/scripts/release/build-binaries.sh taskcluster-proxy
   binaries-client-shell:
     release-toolchains: [go]
-    # goreleaser needs the release tag, which a shallow fetch lacks.
-    full-clone: true
     description: Build the taskcluster CLI and its Homebrew cask
     worker:
       # Appended to the task-defaults public/build artifact (lists merge).
