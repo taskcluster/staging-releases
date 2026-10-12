@@ -20,7 +20,8 @@ export class Release {
     return tasks;
   }
 
-  async run(staging) {
+  async run() {
+    const { staging } = this.cmdOptions;
     const tasks = this.generateTasks();
 
     const taskgraph = new TaskGraph(tasks, {
@@ -55,7 +56,7 @@ export class Release {
 
 export const release = async options => {
   const release = new Release(options);
-  await release.run(false);
+  await release.run();
 };
 
 export const stagingRelease = async options => {
@@ -63,5 +64,5 @@ export const stagingRelease = async options => {
   // bump on a throwaway detached HEAD, push it, and return to the original
   // branch (which is never modified).
   const release = new Release({ ...options, staging: true });
-  await withDetachedHead({ dir: REPO_ROOT, run: () => release.run(true) });
+  await withDetachedHead({ dir: REPO_ROOT, run: () => release.run() });
 };

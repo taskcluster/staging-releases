@@ -12,7 +12,7 @@ import { draftRelease, publishRelease, extractChangelog } from './github-release
 import { publishPypi } from './pypi.js';
 import { publishCrates } from './crates.js';
 import { publishHomebrew } from './homebrew.js';
-import { REPO_ROOT } from '../utils/index.js';
+import { REPO_ROOT, readRepoFile } from '../utils/index.js';
 
 const PluggedOctokit = Octokit.plugin(retry, throttling);
 
@@ -50,7 +50,7 @@ STEPS['github-release-draft'] = async ({ ctx, octokit, workDir, fetchArtifacts }
   const files = await fetchArtifacts('public/build/');
   const changelog = ctx.staging
     ? '(staging release)'
-    : extractChangelog(fs.readFileSync(path.join(REPO_ROOT, 'CHANGELOG.md'), 'utf8'), ctx.version);
+    : extractChangelog(await readRepoFile('CHANGELOG.md'), ctx.version);
   // GITHUB_SHA is set to the pushed commit on every release task; the tag is created there
   const outcome = await draftRelease({
     ctx,

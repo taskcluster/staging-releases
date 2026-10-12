@@ -2,12 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { exec as realExec } from './exec.js';
-import { withRetry } from './retry.js';
+import { fatal, withRetry } from './retry.js';
 
 const OUT_DIR = 'release-dist';
 const FATAL_PUBLISH_ERROR = /403|401|Forbidden|Unauthorized|invalid/i;
-
-const fatal = message => Object.assign(new Error(message), { retriable: false });
 
 export const publishedFiles = async (version, { sleep, log } = {}) =>
   withRetry(

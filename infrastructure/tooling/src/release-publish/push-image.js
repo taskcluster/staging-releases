@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exec as realExec } from './exec.js';
-import { withRetry } from './retry.js';
+import { fatal, withRetry } from './retry.js';
 
 // Pinned by digest: this image runs with Docker Hub credentials mounted.
 // Pinned tag: quay.io/skopeo/stable:v1.20.0 (manifest list digest).
@@ -42,7 +42,7 @@ const MANIFEST_LIST_TYPES = new Set([
 export const configDigestFromManifest = text => {
   const manifest = JSON.parse(text);
   if (MANIFEST_LIST_TYPES.has(manifest.mediaType) || manifest.manifests) {
-    throw Object.assign(new Error('expected an image manifest, got a manifest list'), { retriable: false });
+    throw fatal('expected an image manifest, got a manifest list');
   }
   return manifest.config.digest;
 };
@@ -63,8 +63,6 @@ const EXPECTED_TAGS = {
   'taskcluster-proxy': version => `taskcluster/taskcluster-proxy:v${version}`,
   websocktunnel: version => `taskcluster/websocktunnel:v${version}`,
 };
-
-const fatal = message => Object.assign(new Error(message), { retriable: false });
 
 /**
  * Push one image archive built by release-build to Docker Hub. Safe to rerun: an
@@ -119,15 +117,10 @@ export const pushImage = async ({
     ]);
 
   try {
-    await withRetry(
-      async () => {
-        const r = await exec(['gzip', '-d', '-f', '-k', path.join(dir, `${name}.tar.gz`)]);
-        if (r.code !== 0) {
-          throw new Error(`gzip failed: ${r.stderr}`);
-        }
-      },
-      { sleep, log, label: 'decompress', attempts: 1 }
-    );
+    const gunzip = await exec(['gzip', '-d', '-f', '-k', path.join(dir, `${name}.tar.gz`)]);
+    if (gunzip.code !== 0) {
+      throw new Error(`gzip failed: ${gunzip.stderr}`);
+    }
 
     const archive = await skopeo(['inspect', '--raw', `docker-archive:/work/${name}.tar`]);
     if (archive.code !== 0) {

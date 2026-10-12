@@ -1,4 +1,4 @@
-import { withRetry } from './retry.js';
+import { fatal, withRetry } from './retry.js';
 
 const TAP = { owner: 'taskcluster', repo: 'homebrew-tap', path: 'Casks/taskcluster.rb' };
 
@@ -25,7 +25,7 @@ const waitForUrl = (url, { sleep, log }) =>
  */
 export const publishHomebrew = async ({ ctx, octokit, cask, sleep, log = console.log }) => {
   if (ctx.staging) {
-    throw Object.assign(new Error('publish-homebrew must never run for staging releases'), { retriable: false });
+    throw fatal('publish-homebrew must never run for staging releases');
   }
   if (!cask.includes(`version "${ctx.version}"`)) {
     throw new Error(`cask does not declare version "${ctx.version}" (snapshot build?)`);
@@ -47,9 +47,7 @@ export const publishHomebrew = async ({ ctx, octokit, cask, sleep, log = console
     }
   }
   if (current && (Array.isArray(current) || current.type !== 'file')) {
-    throw Object.assign(new Error(`${TAP.owner}/${TAP.repo}:${TAP.path} is not a regular file`), {
-      retriable: false,
-    });
+    throw fatal(`${TAP.owner}/${TAP.repo}:${TAP.path} is not a regular file`);
   }
   if (current && Buffer.from(current.content, 'base64').toString() === cask) {
     return 'up-to-date';

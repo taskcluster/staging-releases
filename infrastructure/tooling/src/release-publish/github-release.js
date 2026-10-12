@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import semver from 'semver';
-import { withRetry } from './retry.js';
+import { fatal, withRetry } from './retry.js';
 
 const CLIENT_SHELL_PLATFORMS = [
   'darwin-amd64',
@@ -141,12 +141,9 @@ export const draftRelease = async ({ ctx, octokit, dir, files, changelog, commit
     }
     if (current && !isDraft) {
       // never touch the assets of a published release
-      throw Object.assign(
-        new Error(
-          `published release ${tag} has asset ${file} with size ${current.size} and state ${current.state}, ` +
-            `expected ${size} bytes in state uploaded; refusing to modify a published release`
-        ),
-        { retriable: false }
+      throw fatal(
+        `published release ${tag} has asset ${file} with size ${current.size} and state ${current.state}, ` +
+          `expected ${size} bytes in state uploaded; refusing to modify a published release`
       );
     }
     if (outcome === 'up-to-date') {
