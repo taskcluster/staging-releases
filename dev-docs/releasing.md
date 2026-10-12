@@ -61,6 +61,11 @@ If you are modifying the publish code, it can be very difficult to effectively t
 To run a "staging release", run `yarn staging-release`.
 This will push a specially-named branch to the `taskcluster/staging-releases` repository, where CI will run the same release graph described above.
 
+So that staging builds exactly what a real release builds, `yarn staging-release` makes the same version bump and changelog update as `yarn release`, but commits them on a throwaway detached commit.
+It pushes that commit to `staging-release/vX.Y.Z` and then returns you to your branch, which is not modified (if the run fails, the partial changes are discarded and you are still returned to your branch).
+It requires a clean working copy, and the same local tools as `yarn release` (for example, `uv` for the Python client lockfile update).
+Unlike a real release, it does not require your branch to match upstream `main`, and it never creates or pushes a tag.
+
 The staging graph is the same as the release graph, except that images are pushed to a
 throwaway registry on the worker (not Docker Hub), PyPI and crates.io steps run in dry-run
 mode, the release is published on `staging-releases`, the Homebrew tap is not touched, and no
