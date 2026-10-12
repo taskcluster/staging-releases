@@ -2,6 +2,14 @@ import { fatal, withRetry } from './retry.js';
 
 const TAP = { owner: 'taskcluster', repo: 'homebrew-tap', path: 'Casks/taskcluster.rb' };
 
+// The platforms goreleaser writes into the cask (.goreleaser.yaml homebrew_casks).
+const CASK_PLATFORMS = ['darwin-amd64', 'darwin-arm64', 'linux-amd64', 'linux-arm64'];
+
+export const expectedCaskUrls = tag =>
+  CASK_PLATFORMS.map(
+    p => `https://github.com/taskcluster/taskcluster/releases/download/${tag}/taskcluster-${p}.tar.gz`
+  );
+
 export const caskUrls = cask => [...cask.matchAll(/url "([^"]+)"/g)].map(m => m[1]);
 
 const waitForUrl = (url, { sleep, log }) =>
@@ -30,11 +38,15 @@ export const publishHomebrew = async ({ ctx, octokit, cask, sleep, log = console
   if (!cask.includes(`version "${ctx.version}"`)) {
     throw new Error(`cask does not declare version "${ctx.version}" (snapshot build?)`);
   }
-  const urls = caskUrls(cask);
-  if (urls.length === 0) {
-    throw new Error('cask contains no download urls');
+  // The cask comes from a build artifact, so never fetch the URLs it names: require it to
+  // name exactly this release's assets, and fetch the URLs built from the tag instead.
+  // goreleaser writes the version into cask urls as Ruby `#{version}` interpolation.
+  const expected = expectedCaskUrls(ctx.tag);
+  const found = [...new Set(caskUrls(cask).map(url => url.replaceAll('#{version}', ctx.version)))].sort();
+  if (found.length !== expected.length || !expected.every(url => found.includes(url))) {
+    throw fatal(`cask urls [${found.join(', ')}] do not match this release's assets [${expected.join(', ')}]`);
   }
-  for (const url of urls) {
+  for (const url of expected) {
     await waitForUrl(url, { sleep, log });
   }
 
