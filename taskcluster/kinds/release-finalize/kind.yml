@@ -18,6 +18,9 @@ transforms:
   - taskgraph.transforms.task
 
 task-defaults:
+  # Finalize steps run `yarn release:step`: node plus the monorepo install.
+  release-toolchains: [node]
+  yarn-install: true
   worker-type: release
   worker:
     max-run-time: 3600

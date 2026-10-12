@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "taskcluster"))
@@ -397,6 +398,54 @@ def check_release_pipeline(tasks, graph_name, staging):
         raise RuntimeError(f"Invalid {graph_name} task graph:\n- " + "\n- ".join(errors))
 
 
+GO_BUILD_COMMAND = re.compile(
+    r"build-binaries\.sh\s+(generic-worker|worker-runner|livelog|taskcluster-proxy|client-shell)\b"
+    r"|build-image\.sh\s+(livelog|taskcluster-proxy|websocktunnel)\b"
+)
+
+
+def mount_from(url, host, path_prefix="/"):
+    """True if url is served by exactly `host` (not merely mentioning it) under path_prefix."""
+    parsed = urlparse(url)
+    return parsed.hostname == host and parsed.path.startswith(path_prefix)
+
+
+def check_release_toolchains(tasks, graph_name):
+    """Each release task installs only the toolchains it needs."""
+    errors = []
+    for label, task in sorted(tasks.items()):
+        kind = task.get("kind")
+        if kind not in ("release-build", "release-publish", "release-finalize"):
+            continue
+        payload = task["task"].get("payload", {})
+        urls = [m.get("content", {}).get("url", "") for m in payload.get("mounts", [])]
+        command = json.dumps(payload.get("command", []))
+        has_rust = any(mount_from(url, "static.rust-lang.org") for url in urls)
+        if has_rust != (label == "release-publish-crates"):
+            errors.append(f"{label} rust mount present={has_rust}; only crates may mount rust")
+        yarn_install = "yarn --immutable" in command
+        if kind == "release-build" and yarn_install:
+            errors.append(f"{label} runs a full monorepo yarn install")
+        if kind != "release-build" and not yarn_install:
+            errors.append(f"{label} does not run yarn --immutable")
+        if kind != "release-build" and any(mount_from(url, "go.dev", "/dl") for url in urls):
+            errors.append(f"{label} mounts a Go toolchain it does not need")
+        if "nvm" in command or "raw.githubusercontent.com/nvm-sh" in command:
+            errors.append(f"{label} still installs node via nvm")
+        full_clone = "--no-single-branch" in command
+        if full_clone != (label == "release-build-binaries-client-shell"):
+            errors.append(f"{label} full clone={full_clone}; only binaries-client-shell needs one")
+        if GO_BUILD_COMMAND.search(command) and not any(mount_from(url, "go.dev", "/dl/") for url in urls):
+            errors.append(f"{label} builds Go code but does not mount a Go toolchain (go.dev/dl/)")
+        if label == "release-publish-crates" and not any(mount_from(url, "static.rust-lang.org") for url in urls):
+            errors.append(f"{label} publishes crates but does not mount a Rust toolchain (static.rust-lang.org)")
+        uses_node = re.search(r"\b(yarn|npm)\b", command) or "npm-client" in label
+        if uses_node and not any(mount_from(url, "nodejs.org", "/dist/") for url in urls):
+            errors.append(f"{label} runs yarn/npm without the nodejs.org mount")
+    if errors:
+        raise RuntimeError(f"Invalid {graph_name} task graph:\n- " + "\n- ".join(errors))
+
+
 def check_no_release_tasks(tasks, graph_name):
     if release := sorted(label for label, t in tasks.items() if t.get("kind", "").startswith("release")):
         raise RuntimeError(f"{graph_name} graph contains release tasks: " + ", ".join(release))
@@ -452,6 +501,8 @@ def main():
         print(f"{graph_name} graph has the expected build tasks")
         check_release_pipeline(tasks, graph_name, staging)
         print(f"{graph_name} graph has the expected gated release pipeline")
+        check_release_toolchains(tasks, graph_name)
+        print(f"{graph_name} graph installs only the toolchains each task needs")
 
     tasks = generate_target_graph(PARAMETERS_DIR / MAIN_PUSH_PARAMETERS, version)
     check_no_release_tasks(tasks, "main push")

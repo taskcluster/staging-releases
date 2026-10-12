@@ -17,6 +17,12 @@ transforms:
   - taskgraph.transforms.task
 
 task-defaults:
+  # Every publish step runs `yarn release:step`, so it needs node and the
+  # monorepo install. taskgraph merges task-defaults into tasks by appending
+  # lists, so a task's own release-toolchains are added to [node] (crates
+  # gets [node, rust]).
+  release-toolchains: [node]
+  yarn-install: true
   worker-type: release
   worker:
     max-run-time: 3600
@@ -106,6 +112,7 @@ tasks:
         uv --version &&
         yarn release:step --step publish-pypi
   crates:
+    release-toolchains: [rust]
     description: Publish the Rust client crates to crates.io
     dependencies:
       gate: release-gate-builds

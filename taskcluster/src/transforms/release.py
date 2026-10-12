@@ -1,41 +1,7 @@
 from taskgraph.transforms.base import TransformSequence
 
 from ..constants import RELEASE_DEADLINE, RELEASE_NOTIFY, RELEASE_SECRET, STAGING_RELEASE_SECRET
-from ..release import release_info
-
-# Shared by every release task that runs on a worker: toolchains, then a full
-# clone (shallow clones miss the tags that goreleaser and `git describe` need).
-TOOLCHAIN_INSTALL = [
-    'export GOROOT="$(pwd)/go/go"',
-    'export GOPATH="$(pwd)/go/path"',
-    "mkdir -p ${{GOPATH}}",
-    'export PATH="${{GOROOT}}/bin:${{GOPATH}}/bin:${{PATH}}"',
-    "go version",
-    "./rust/rust-$RUST_VERSION-x86_64-unknown-linux-gnu/install.sh",
-    "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.7/install.sh | bash",
-    ". ~/.nvm/nvm.sh",
-    "nvm install $NODE_VERSION",
-    "corepack enable",
-    "git clone --quiet --no-single-branch --tags {head_repository} taskcluster",
-    "cd taskcluster",
-    "git checkout {head_rev}",
-    "yarn --immutable",
-]
-
-TOOLCHAIN_MOUNTS = [
-    {
-        "content": {"url": "https://go.dev/dl/{go_version}.linux-amd64.tar.gz"},
-        "directory": "go",
-        "format": "tar.gz",
-    },
-    {
-        "content": {
-            "url": "https://static.rust-lang.org/dist/rust-{rust_version}-x86_64-unknown-linux-gnu.tar.gz"
-        },
-        "directory": "rust",
-        "format": "tar.gz",
-    },
-]
+from ..release import release_info, toolchain_setup
 
 transforms = TransformSequence()
 
@@ -87,13 +53,18 @@ toolchain = TransformSequence()
 
 @toolchain.add
 def add_toolchain(config, tasks):
+    """Install only what each task opts into: `release-toolchains` (subset of
+    go, rust, node), `yarn-install` (monorepo `yarn --immutable`, needs node)
+    and `full-clone` (all branches and tags instead of a depth-1 fetch)."""
     for task in tasks:
-        task["run"]["install"] = list(TOOLCHAIN_INSTALL)
+        install, mounts = toolchain_setup(
+            task.pop("release-toolchains", []),
+            yarn_install=task.pop("yarn-install", False),
+            full_clone=task.pop("full-clone", False),
+        )
+        task["run"]["install"] = install
         worker = task.setdefault("worker", {})
-        worker.setdefault("mounts", [])
-        worker["mounts"] = [
-            dict(m, content=dict(m["content"])) for m in TOOLCHAIN_MOUNTS
-        ] + worker["mounts"]
+        worker["mounts"] = mounts + worker.get("mounts", [])
         worker["taskcluster-proxy"] = True
         worker["run-task-as-current-user"] = True
         yield task

@@ -66,7 +66,7 @@ case "$name" in
 esac
 
 docker save -o "$out/$name.tar" "$tag"
-config="$(tar -xOf "$out/$name.tar" manifest.json | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0))[0].Config)')"
+config="$(tar -xOf "$out/$name.tar" manifest.json | python3 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)[0]["Config"])')"
 echo "sha256:$(tar -xOf "$out/$name.tar" "$config" | sha256sum | cut -d' ' -f1)" > "$out/$name.digest"
 gzip -1 "$out/$name.tar"
 echo "$tag" > "$out/$name.tag"

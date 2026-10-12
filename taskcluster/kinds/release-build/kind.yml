@@ -22,6 +22,10 @@ task-defaults:
   run:
     using: bare
 
+# Each task lists only the toolchains it needs (release-toolchains: subset of
+# go, rust, node); see add_toolchain in src/transforms/release.py. The Docker
+# images that build in a multi-stage Dockerfile need none. No build runs the
+# monorepo `yarn --immutable`.
 tasks:
   image-monoimage:
     description: Build the Taskcluster monoimage
@@ -49,34 +53,44 @@ tasks:
     run:
       command: taskcluster/scripts/release/build-image.sh generic-worker
   image-livelog:
+    release-toolchains: [go]
     description: Build the livelog Docker image
     run:
       command: taskcluster/scripts/release/build-image.sh livelog
   image-taskcluster-proxy:
+    release-toolchains: [go]
     description: Build the taskcluster-proxy Docker image
     run:
       command: taskcluster/scripts/release/build-image.sh taskcluster-proxy
   image-websocktunnel:
+    release-toolchains: [go]
     description: Build the websocktunnel Docker image
     run:
       command: taskcluster/scripts/release/build-image.sh websocktunnel
   binaries-generic-worker:
+    release-toolchains: [go]
     description: Build generic-worker release binaries
     run:
       command: taskcluster/scripts/release/build-binaries.sh generic-worker
   binaries-worker-runner:
+    release-toolchains: [go]
     description: Build worker-runner release binaries
     run:
       command: taskcluster/scripts/release/build-binaries.sh worker-runner
   binaries-livelog:
+    release-toolchains: [go]
     description: Build livelog release binaries
     run:
       command: taskcluster/scripts/release/build-binaries.sh livelog
   binaries-taskcluster-proxy:
+    release-toolchains: [go]
     description: Build taskcluster-proxy release binaries
     run:
       command: taskcluster/scripts/release/build-binaries.sh taskcluster-proxy
   binaries-client-shell:
+    release-toolchains: [go]
+    # goreleaser needs the release tag, which a shallow fetch lacks.
+    full-clone: true
     description: Build the taskcluster CLI and its Homebrew cask
     worker:
       # Appended to the task-defaults public/build artifact (lists merge).
@@ -87,10 +101,13 @@ tasks:
     run:
       command: taskcluster/scripts/release/build-binaries.sh client-shell
   npm-client:
+    release-toolchains: [node]
     description: Pack @taskcluster/client for npm
     run:
       command: taskcluster/scripts/release/build-binaries.sh npm-client
   npm-client-web:
+    # build-binaries.sh runs its own yarn install in clients/client-web.
+    release-toolchains: [node]
     description: Pack @taskcluster/client-web for npm
     run:
       command: taskcluster/scripts/release/build-binaries.sh npm-client-web
