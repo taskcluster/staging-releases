@@ -16,7 +16,8 @@ export const publishedFiles = async (version, { sleep, log } = {}) =>
       if (res.status === 404) {
         return new Map();
       }
-      if (res.status >= 400 && res.status < 500) {
+      // 429 is rate limiting, which passes; every other 4xx means the request itself is wrong
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
         throw fatal(`PyPI returned ${res.status}`);
       }
       if (!res.ok) {
