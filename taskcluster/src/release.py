@@ -75,6 +75,22 @@ _TOOLCHAINS = {
             "corepack enable",
         ],
     ),
+    "uv": (
+        {
+            "content": {
+                "url": (
+                    "https://github.com/astral-sh/uv/releases/download/{uv_version}/"
+                    "uv-x86_64-unknown-linux-gnu.tar.gz"
+                )
+            },
+            "directory": "uv",
+            "format": "tar.gz",
+        },
+        [
+            'export PATH="$(pwd)/uv/uv-x86_64-unknown-linux-gnu:${{PATH}}"',
+            "uv --version",
+        ],
+    ),
 }
 
 # goreleaser and `git describe` need tags, which a shallow fetch lacks.
@@ -95,8 +111,8 @@ _SHALLOW_CLONE = [
 
 def toolchain_setup(toolchains, yarn_install, full_clone):
     """Return (install lines, mounts) for a release task that needs the given
-    toolchains (a subset of go, rust, node). Toolchains are always installed in
-    the order go, rust, node, then the checkout, then `yarn --immutable`."""
+    toolchains (a subset of go, rust, node, uv). Toolchains are always installed
+    in the order go, rust, node, uv, then the checkout, then `yarn --immutable`."""
     if unknown := sorted(set(toolchains) - set(_TOOLCHAINS)):
         raise ValueError(f"unknown release toolchains: {unknown}")
     if yarn_install and "node" not in toolchains:

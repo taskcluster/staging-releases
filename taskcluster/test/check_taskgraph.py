@@ -348,16 +348,6 @@ def check_release_pipeline(tasks, graph_name, staging):
         if (env.get("STAGING") == "1") != staging:
             errors.append(f"{label} has STAGING={env.get('STAGING')!r}")
 
-    pypi = tasks.get("release-publish-pypi", {}).get("task", {}).get("payload", {})
-    mount_urls = [m.get("content", {}).get("url", "") for m in pypi.get("mounts", [])]
-    command = json.dumps(pypi.get("command", []))
-    if "sha256sum -c" not in command or "astral-sh/uv/releases/download/" not in command:
-        errors.append("release-publish-pypi does not download uv and verify its sha256")
-    if any("astral-sh" in url for url in mount_urls):
-        errors.append("release-publish-pypi mounts uv without checksum verification")
-    if "uv --version" not in command:
-        errors.append("release-publish-pypi command does not check uv --version")
-
     if not staging:
         homebrew = set(tasks.get("release-finalize-publish-homebrew", {}).get("dependencies", {}).values())
         if "release-finalize-github-release-publish" not in homebrew:

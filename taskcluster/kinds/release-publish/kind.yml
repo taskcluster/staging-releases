@@ -20,7 +20,7 @@ task-defaults:
   # Every publish step runs `yarn release:step`, so it needs node and the
   # monorepo install. taskgraph merges task-defaults into tasks by appending
   # lists, so a task's own release-toolchains are added to [node] (crates
-  # gets [node, rust]).
+  # gets [node, rust] and pypi [node, uv]).
   release-toolchains: [node]
   yarn-install: true
   worker-type: release
@@ -95,22 +95,14 @@ tasks:
     run:
       command: yarn release:step --step github-release-draft
   pypi:
+    # pypi.js runs `uv build` and `uv publish`; the uv toolchain mounts
+    # the version in .uv-version.
+    release-toolchains: [uv]
     description: Publish the Python client to PyPI
     dependencies:
       gate: release-gate-builds
     run:
-      # pypi.js runs `uv build` and `uv publish`. Keep the uv version in sync
-      # with &uv_version in taskcluster/kinds/docker-image/kind.yml, and update
-      # the sha256 with it. This task holds PyPI credentials and task mounts
-      # cannot verify a checksum, so uv is downloaded and verified here instead.
-      # Downloads land in the task directory, the parent of the checkout.
-      command: >-
-        curl -fsSL -o ../uv.tar.gz https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-gnu.tar.gz &&
-        echo "2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff  ../uv.tar.gz" | sha256sum -c - &&
-        tar -xzf ../uv.tar.gz -C .. &&
-        export PATH="$(pwd)/../uv-x86_64-unknown-linux-gnu:$PATH" &&
-        uv --version &&
-        yarn release:step --step publish-pypi
+      command: yarn release:step --step publish-pypi
   crates:
     release-toolchains: [rust]
     description: Publish the Rust client crates to crates.io

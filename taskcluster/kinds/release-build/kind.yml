@@ -23,7 +23,7 @@ task-defaults:
     using: bare
 
 # Each task lists only the toolchains it needs (release-toolchains: subset of
-# go, rust, node); see add_toolchain in src/transforms/release.py. The Docker
+# go, rust, node, uv); see add_toolchain in src/transforms/release.py. The Docker
 # images that build in a multi-stage Dockerfile need none. No build runs the
 # monorepo `yarn --immutable`.
 tasks:
