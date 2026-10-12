@@ -30,11 +30,6 @@ Every publish step checks the destination first, so it can be run any number of 
 Every release task also emails taskcluster-notifications@mozilla.com immediately if it fails or
 raises an exception, so you do not need to wait for `release-notify` to learn about a problem. Staging releases do not send email; watch the task group instead.
 
-The old `yarn release:publish` command (defined in `infrastructure/tooling/src/main.js`, implemented in
-`infrastructure/tooling/src/build/index.js`) remains for one release as a fallback and will be removed in a
-follow-up. No task definition runs it anymore (the old `release` kind was removed), so using it means
-creating a task by hand with the release secret scope.
-
 ### When a release task fails
 
 Open the task group linked from the commit's checks page (`yarn release` prints the URL).

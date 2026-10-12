@@ -82,7 +82,7 @@ export default ({ tasks, cmdOptions, credentials, baseDir, logsDir }) => {
         env: { DOCKER_BUILDKIT: 1, ...process.env },
       });
 
-      if (cmdOptions.staging || !cmdOptions.push) {
+      if (!cmdOptions.push) {
         return provides;
       }
 
