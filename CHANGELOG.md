@@ -3,6 +3,30 @@
 <!-- `yarn release` will insert the existing changelog snippets here: -->
 <!-- NEXT RELEASE HERE -->
 
+## v113.1.1
+
+### GENERAL
+
+▶ [patch]
+Upgrades to Node.js v24.21.0.
+
+▶ [patch]
+Upgrades to go1.27.2 and golangci-lint v2.14.0.
+
+Release notes [here](https://go.dev/doc/devel/release#go1.27.2).
+
+### USERS
+
+▶ [patch]
+The web UI now renews expired Taskcluster credentials before REST API requests. Temporary renewal failures no longer clear the local session.
+
+▶ [patch] [#9265](https://github.com/taskcluster/taskcluster/issues/9265)
+taskcluster-proxy no longer stalls for minutes when its upstream connection silently stops working. It now pings HTTP/2 connections that receive nothing for 30 seconds and closes them if the ping isn't answered within 15 seconds, so pending requests are retried on a new connection. Upstream requests are also cancelled when the client disconnects, and credential updates no longer wait for (or block) pending requests.
+
+### OTHER
+
+▶ Additional change not described here: [#7022](https://github.com/taskcluster/taskcluster/issues/7022).
+
 ## v113.1.0
 
 ### WORKER-DEPLOYERS
