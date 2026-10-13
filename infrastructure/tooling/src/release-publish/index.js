@@ -9,8 +9,6 @@ import { loadContext, loadCredentials } from './context.js';
 import { fetchDependencyArtifacts } from './artifacts.js';
 import { pushImage, startScratchRegistry } from './push-image.js';
 import { draftRelease, publishRelease, extractChangelog } from './github-release.js';
-import { publishPypi } from './pypi.js';
-import { publishCrates } from './crates.js';
 import { publishHomebrew } from './homebrew.js';
 import { REPO_ROOT, readRepoFile } from '../utils/index.js';
 
@@ -72,13 +70,6 @@ STEPS['github-release-publish'] = async ({ ctx, octokit, workDir, fetchArtifacts
   const expected = JSON.parse(fs.readFileSync(path.join(workDir, 'expected-assets.json'), 'utf8'));
   return publishRelease({ ctx, octokit, expected });
 };
-
-STEPS['publish-pypi'] = async ({ ctx, creds }) => {
-  return publishPypi({ ctx, creds, clientDir: path.join(REPO_ROOT, 'clients', 'client-py') });
-};
-
-STEPS['publish-crates'] = async ({ ctx, creds }) =>
-  JSON.stringify(await publishCrates({ ctx, creds, rustDir: path.join(REPO_ROOT, 'clients', 'client-rust') }));
 
 STEPS['publish-homebrew'] = async ({ ctx, octokit, workDir, fetchArtifacts }) => {
   await fetchArtifacts('public/homebrew/');

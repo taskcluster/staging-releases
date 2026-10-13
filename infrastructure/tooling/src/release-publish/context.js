@@ -34,9 +34,6 @@ export const loadCredentials = async ({ staging, proxyUrl }) => {
   const { secret } = await secrets.get(secretName);
   return {
     ghToken: secret.GH_TOKEN,
-    cratesioToken: secret.CRATESIO_TOKEN,
-    pypiUsername: secret.PYPI_USERNAME,
-    pypiPassword: secret.PYPI_PASSWORD,
     dockerUsername: secret.DOCKER_USERNAME,
     dockerPassword: secret.DOCKER_PASSWORD,
   };
